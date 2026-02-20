@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.0.2</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>br.com.oraped</groupId>
+  <artifactId>api-oraped</artifactId>
+  <version>0.0.1-SNAPSHOT</version>
+  <name>api-oraped</name>
+  <description>OraPed API</description>
+
+  <properties>
+    <java.version>17</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+  </properties>
+
+  <dependencies>
+
+    <!-- ===================================================== -->
+    <!-- WEB -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+
+    <!-- ===================================================== -->
+    <!-- VALIDATION -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+
+    <!-- ===================================================== -->
+    <!-- DATA / JPA -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+
+    <!-- ===================================================== -->
+    <!-- SECURITY -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-security</artifactId>
+    </dependency>
+
+    <!-- JWT -->
+    <dependency>
+      <groupId>com.auth0</groupId>
+      <artifactId>java-jwt</artifactId>
+      <version>4.4.0</version>
+    </dependency>
+
+    <!-- ===================================================== -->
+    <!-- DATABASE -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- ===================================================== -->
+    <!-- DEV / UTIL -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <optional>true</optional>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-devtools</artifactId>
+      <scope>runtime</scope>
+      <optional>true</optional>
+    </dependency>
+
+    <!-- ===================================================== -->
+    <!-- TEST -->
+    <!-- ===================================================== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.junit.vintage</groupId>
+          <artifactId>junit-vintage-engine</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    
+    <!--SPRING DOC-->
+    <dependency>
+	  <groupId>org.springdoc</groupId>
+	  <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+	  <version>3.0.1</version>
+	</dependency>
+
+  </dependencies>
+
+  <build>
+    <plugins>
+
+      <!-- Compilação Java 17 -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <release>${java.version}</release>
+        </configuration>
+      </plugin>
+
+      <!-- Encoding dos resources -->
+      <plugin>
+		  <groupId>org.apache.maven.plugins</groupId>
+		  <artifactId>maven-resources-plugin</artifactId>
+		  <version>3.3.1</version>
+		  <configuration>
+		    <encoding>${project.build.sourceEncoding}</encoding>
+		
+		    <!-- Evita tentar filtrar arquivos binários/propensos a quebra -->
+		    <nonFilteredFileExtensions>
+		      <nonFilteredFileExtension>jpg</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>jpeg</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>png</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>gif</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>pdf</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>p12</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>pfx</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>jks</nonFilteredFileExtension>
+		      <nonFilteredFileExtension>properties</nonFilteredFileExtension>
+		    </nonFilteredFileExtensions>
+		  </configuration>
+		</plugin>
+
+
+      <!-- Spring Boot plugin -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>
+              <groupId>org.projectlombok</groupId>
+              <artifactId>lombok</artifactId>
+            </exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+
+    </plugins>
+  </build>
+
+</project>
