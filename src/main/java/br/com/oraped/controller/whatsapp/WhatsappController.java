@@ -19,7 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import br.com.oraped.dto.whatsapp.entrada.MensagemWhatsappEntradaDTO;
 import br.com.oraped.dto.whatsapp.saida.RespostaWhatsappDTO;
 import br.com.oraped.integrations.OrazzaWhatsappCallbackClient;
-import br.com.oraped.service.whatsapp.OrquestradorWhatsappService;
+import br.com.oraped.service.whatsapp.orquestrador.OrquestradorWhatsappService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 

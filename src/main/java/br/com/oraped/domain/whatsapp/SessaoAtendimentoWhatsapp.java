@@ -143,8 +143,37 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_marcas_editar_nome")
     private Integer offsetListaMarcasEditarNome;
 
+    // =========================================================
+    // ADMIN — cep (Editar por digitação)
+    // =========================================================
+    @Column(nullable = false)
+    private boolean aguardandoCepEstabelecimento = false;
   
-  
+    
+    // =========================================================
+    // ADMIN — Taxa por bairro (digitação)
+    // =========================================================
+
+    @Column(name = "aguardando_taxa_entrega_bairro", nullable = false)
+    private Boolean aguardandoTaxaEntregaBairro;
+
+    @Column(name = "id_bairro_taxa_entrega")
+    private Long idBairroTaxaEntrega;
+
+    @Column(name = "offset_lista_taxa_entrega_bairro")
+    private Integer offsetListaTaxaEntregaBairro;
+
+
+    // =========================================================
+    // ADMIN — Taxa padrão (digitação)
+    // =========================================================
+    @Column(name = "aguardando_taxa_entrega_padrao", nullable = false)
+    private Boolean aguardandoTaxaEntregaPadrao;
+    
+    @Column(name = "offset_lista_taxa_padrao_voltar")
+    private Integer offsetListaTaxaPadraoVoltar;
+        
+    
     @PrePersist
     public void prePersist() {
 
@@ -170,6 +199,14 @@ public class SessaoAtendimentoWhatsapp {
 
         if (aguardandoEditarMarcaNome == null) {
             aguardandoEditarMarcaNome = false;
+        }
+        
+        if (aguardandoTaxaEntregaBairro == null) {
+            aguardandoTaxaEntregaBairro = false;
+        }
+        
+        if (aguardandoTaxaEntregaPadrao == null) {
+        	aguardandoTaxaEntregaPadrao = false;
         }
     }
 

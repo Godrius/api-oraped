@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.com.oraped.domain.CategoriaProduto;
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.Pedido;
 import br.com.oraped.domain.Produto;
 import br.com.oraped.domain.enums.FormaPagamentoPedido;
 import br.com.oraped.domain.enums.StatusPedido;
@@ -39,11 +40,12 @@ import br.com.oraped.dto.whatsapp.saida.RespostaWhatsappDTO;
 import br.com.oraped.service.ClienteService;
 import br.com.oraped.service.EstabelecimentoService;
 import br.com.oraped.service.PedidoService;
+import br.com.oraped.service.whatsapp.administrador.AdministradorWhatsappService;
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class OrquestradorWhatsappService {
+public class OrquestradorWhatsappService_old {
 
     private final AdministradorWhatsappService administradorWhatsappService;
     private final EstabelecimentoService estabelecimentoService;
@@ -52,12 +54,14 @@ public class OrquestradorWhatsappService {
     
     private final SessaoAtendimentoWhatsappService sessaoService;
     private final MensagemAtendimentoWhatsappService mensagemService;
-    private final WhatsappPerguntaRetryService retryService;
     
     private final WhatsappMensagemFactory msg;
 
     private final ObjectMapper objectMapper;
 
+    
+    
+    //======================PROCESSADOR DE MENSAGENS=====================
     public RespostaWhatsappDTO processar(MensagemWhatsappEntradaDTO req) {
 
         String whatsappCliente = msg.normalizarSomenteDigitos(req.getWhatsappCliente());
@@ -80,9 +84,6 @@ public class OrquestradorWhatsappService {
                 whatsappReceptor,
                 estabelecimento.getId()
             );
-
-            // ✅ Regra: cancelar retries imediatamente quando qualquer msg do cliente chegar
-            retryService.cancelarRetries(sessao.getId());
 
             boolean temSaidaAnterior = mensagemService.buscarUltimaSaida(sessao.getId()).isPresent();
 
@@ -149,8 +150,7 @@ public class OrquestradorWhatsappService {
                     if ("MENU".equals(upper)) {
 
                         sessaoService.limparAguardando(sessao.getId());
-                        retryService.cancelarRetries(sessao.getId());
-
+                        
                         MensagemWhatsappSaidaDTO mensagemSaida = temSaidaAnterior
                             ? montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
                             : montarMenuPrincipal(estabelecimento, whatsappCliente);
@@ -159,26 +159,7 @@ public class OrquestradorWhatsappService {
                         return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
                     }
 
-                    if ("REENVIAR".equals(upper)) {
-
-                        MensagemWhatsappSaidaDTO mensagemSaida = montarReenvioUltimaPerguntaBloqueante(
-                            estabelecimento,
-                            whatsappCliente,
-                            sessao.getId()
-                        );
-
-                        // re-agenda retry se ainda estiver em etapa bloqueante
-                        agendarRetrySeBloqueante(
-                            sessao.getId(),
-                            whatsappCliente,
-                            whatsappReceptor,
-                            phoneNumberId,
-                            mensagemSaida
-                        );
-
-                        mensagemService.registrarSaida(sessao.getId(), "reenviar_ultima_pergunta", mensagemSaida);
-                        return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
-                    }
+                    
                 }
 
                 System.out.println("[WA] FLOW entrouTextoLivre"
@@ -290,6 +271,86 @@ public class OrquestradorWhatsappService {
                         mensagemService.registrarSaida(sessao.getId(), roteado.chave, roteado.mensagem);
                         return montarResposta(req, whatsappCliente, whatsappReceptor, roteado.mensagem, roteado.extras);
                     }
+                    
+                    
+                    if (sessaoService.isAguardandoCepEstabelecimento(sessao.getId())) {
+
+                        var r = administradorWhatsappService.concluirCadastroCepLojaPorDigitacao(
+                            estabelecimento,
+                            whatsappCliente,
+                            sessao.getId(),
+                            safeTextoEntrada(req)
+                        );
+
+                        boolean salvouCep = r != null && r.chave != null && r.chave.startsWith("admin_entregas_cep_salvo");
+
+                        if (!salvouCep) {
+                            RoteamentoResultado roteado = new RoteamentoResultado(r.chave, r.mensagem);
+                            mensagemService.registrarSaida(sessao.getId(), roteado.chave, roteado.mensagem);
+                            return montarResposta(req, whatsappCliente, whatsappReceptor, roteado.mensagem, roteado.extras);
+                        }
+
+                        // Recarrega estabelecimento para refletir CEP/bairro base atualizados
+                        Estabelecimento atualizado = estabelecimentoService.buscarPorWhatsapp(whatsappReceptor);
+
+                        MensagemWhatsappSaidaDTO menuEntregas =
+                            administradorWhatsappService.montarMenuEntregas(atualizado, whatsappCliente).mensagem;
+
+                        RoteamentoResultado roteado = new RoteamentoResultado(
+                            r.chave,
+                            r.mensagem,
+                            List.of(menuEntregas)
+                        );
+
+                        mensagemService.registrarSaida(sessao.getId(), roteado.chave, roteado.mensagem);
+                        return montarResposta(req, whatsappCliente, whatsappReceptor, roteado.mensagem, roteado.extras);
+                    }
+                    
+                    
+                    if (sessaoService.isAguardandoTaxaEntregaBairro(sessao.getId())) {
+
+                        AdministradorWhatsappService.ResultadoAdmin r =
+                            administradorWhatsappService.concluirCadastroTaxaEntregaBairroPorDigitacao(
+                                estabelecimento,
+                                whatsappCliente,
+                                sessao.getId(),
+                                safeTextoEntrada(req)
+                            );
+
+                        RoteamentoResultado roteado = new RoteamentoResultado(r.chave, r.mensagem);
+
+                        mensagemService.registrarSaida(sessao.getId(), roteado.chave, roteado.mensagem);
+                        return montarResposta(req, whatsappCliente, whatsappReceptor, roteado.mensagem, roteado.extras);
+                    }
+                }
+                
+                if (sessaoService.isAguardandoTaxaEntregaPadrao(sessao.getId())) {
+
+                    AdministradorWhatsappService.ResultadoAdmin r =
+                        administradorWhatsappService.concluirCadastroTaxaEntregaPadraoPorDigitacao(
+                            estabelecimento,
+                            whatsappCliente,
+                            sessao.getId(),
+                            safeTextoEntrada(req)
+                        );
+
+                    // recarrega estabelecimento para refletir a taxa nova
+                    Estabelecimento atualizado = estabelecimentoService.buscarPorWhatsapp(whatsappReceptor);
+
+                    MensagemWhatsappSaidaDTO menuEntregas =
+                        administradorWhatsappService.montarMenuEntregas(atualizado, whatsappCliente).mensagem;
+
+                    // ou, se preferir, voltar pro menu de taxas:
+                    // MensagemWhatsappSaidaDTO menuTaxas = administradorWhatsappService.montarMenuTaxasEntrega(atualizado, whatsappCliente).mensagem;
+
+                    RoteamentoResultado roteado = new RoteamentoResultado(
+                        r.chave,
+                        r.mensagem,
+                        List.of(menuEntregas)
+                    );
+
+                    mensagemService.registrarSaida(sessao.getId(), roteado.chave, roteado.mensagem);
+                    return montarResposta(req, whatsappCliente, whatsappReceptor, roteado.mensagem, roteado.extras);
                 }
 
                 if (sessaoService.isAguardandoEnderecoEntrega(sessao.getId())) {
@@ -309,8 +370,6 @@ public class OrquestradorWhatsappService {
 
                     MensagemWhatsappSaidaDTO mensagemSaida = montarEscolhaFormaPagamento(whatsappCliente);
 
-                    agendarRetrySeBloqueante(sessao.getId(), whatsappCliente, whatsappReceptor, phoneNumberId, mensagemSaida);
-
                     mensagemService.registrarSaida(sessao.getId(), "forma_pagamento_menu", mensagemSaida);
                     return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
                 }
@@ -318,8 +377,6 @@ public class OrquestradorWhatsappService {
                 if (sessaoService.isAguardandoTrocoConfirmacao(sessao.getId())) {
 
                     MensagemWhatsappSaidaDTO mensagemSaida = montarPerguntaTrocoSimNao(whatsappCliente);
-
-                    agendarRetrySeBloqueante(sessao.getId(), whatsappCliente, whatsappReceptor, phoneNumberId, mensagemSaida);
 
                     mensagemService.registrarSaida(sessao.getId(), "troco_confirmacao_menu", mensagemSaida);
                     return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
@@ -334,11 +391,6 @@ public class OrquestradorWhatsappService {
                         safeTextoEntrada(req)
                     );
 
-                    // se ainda estiver aguardando troco valor, re-agenda
-                    if (sessaoService.isAguardandoTrocoValor(sessao.getId())) {
-                        agendarRetrySeBloqueante(sessao.getId(), whatsappCliente, whatsappReceptor, phoneNumberId, mensagemSaida);
-                    }
-
                     mensagemService.registrarSaida(sessao.getId(), "troco_valor_registrado", mensagemSaida);
                     return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
                 }
@@ -346,10 +398,8 @@ public class OrquestradorWhatsappService {
                 if (sessaoService.isAguardandoConfirmacaoFinal(sessao.getId())) {
 
                     SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(sessao.getId());
-                    MensagemWhatsappSaidaDTO mensagemSaida = montarConfirmacaoFinalAntesDeEnviar(whatsappCliente, s);
-
-                    agendarRetrySeBloqueante(sessao.getId(), whatsappCliente, whatsappReceptor, phoneNumberId, mensagemSaida);
-
+                    MensagemWhatsappSaidaDTO mensagemSaida = montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, s);
+                    
                     mensagemService.registrarSaida(sessao.getId(), "confirmacao_final", mensagemSaida);
                     return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
                 }
@@ -384,11 +434,6 @@ public class OrquestradorWhatsappService {
 
                 mensagemService.registrarSaida(sessao.getId(), "erro_roteamento", mensagemSaida);
                 return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
-            }
-
-            // ✅ se a saída for bloqueante e sessão continuar no mesmo estado, agenda retry
-            if (roteado != null && roteado.mensagem != null) {
-                agendarRetrySeBloqueante(sessao.getId(), whatsappCliente, whatsappReceptor, phoneNumberId, roteado.mensagem);
             }
 
             mensagemService.registrarSaida(sessao.getId(), roteado.chave, roteado.mensagem);
@@ -533,7 +578,6 @@ public class OrquestradorWhatsappService {
 
 	        case "LIMPAR_CARRINHO":
 	            sessaoService.limparPedidoEmAndamento(idSessao);
-	            retryService.cancelarRetries(idSessao);
 	            return new RoteamentoResultado("carrinho_limpo", montarCarrinhoLimpo(estabelecimento, whatsappCliente, idSessao));
 
 	        case "INFORMAR_ENDERECO":
@@ -545,26 +589,17 @@ public class OrquestradorWhatsappService {
 	        case "INFORMAR_OUTRO_ENDERECO":
 	            sessaoService.marcarAguardandoEnderecoEntrega(idSessao);
 	            MensagemWhatsappSaidaDTO mEnd = montarSolicitacaoEnderecoEntrega(whatsappCliente);
-	            retryService.agendarRetriesSeNecessario(
-	                idSessao,
-	                WhatsappPerguntaRetryService.EtapaBloqueante.ENDERECO_ENTREGA,
-	                whatsappCliente,
-	                whatsappReceptor,
-	                phoneNumberId,
-	                mEnd
-	            );
 	            return new RoteamentoResultado("solicitar_endereco_entrega", mEnd);
 
 	        case "SELECIONAR_PAGAMENTO":
-	            return tratarSelecaoPagamento(whatsappCliente, whatsappReceptor, phoneNumberId, idSessao, cmd.getParte(2));
+	            return tratarSelecaoPagamento(estabelecimento, whatsappCliente, whatsappReceptor, phoneNumberId, idSessao, cmd.getParte(2));
 
 	        case "TROCO":
-	            return tratarTroco(whatsappCliente, whatsappReceptor, phoneNumberId, idSessao, cmd.getParte(2));
-
+	            return tratarTroco(estabelecimento, whatsappCliente, whatsappReceptor, phoneNumberId, idSessao, cmd.getParte(2));
+	            
 	        case "ENVIAR_PEDIDO":
 	            // ✅ ao enviar, não pode continuar aguardando confirmação final
 	            sessaoService.desmarcarAguardandoConfirmacaoFinal(idSessao);
-	            retryService.cancelarRetries(idSessao);
 	            return tratarEnvioPedidoDefinitivo(estabelecimento, whatsappCliente, idSessao);
 
 	        case "LISTA_PRODUTOS": {
@@ -602,7 +637,7 @@ public class OrquestradorWhatsappService {
 	            return tratarAdicionarProduto(estabelecimento, whatsappCliente, idProduto, quantidade);
 	        }
 
-	        case "SOLICITAR_QUANTIDADE":
+	        case "SOLICITAR_QUANTIDADE": {
 	            return new RoteamentoResultado(
 	                "solicitar_quantidade_manual",
 	                msg.texto(
@@ -610,7 +645,167 @@ public class OrquestradorWhatsappService {
 	                    "Certo! Me informe a quantidade desejada para o produto.\n\nExemplo: 15"
 	                )
 	            );
+	        }
+	        
+	        case "ULTIMO_PEDIDO":
+	            return tratarUltimoPedidoParaRevisao(estabelecimento, whatsappCliente);
 
+	        // =========================
+	        // REVISÃO DE PEDIDO (cliente)
+	        // =========================
+	        case "PEDIDO_REVISAR": {
+	            Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+	            return tratarTelaRevisaoPedido(estabelecimento, whatsappCliente, idPedido);
+	        }
+
+            case "REVISAO_ADICIONAR_ITENS": {
+                Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+
+                PedidoResponseDTO pedido = pedidoService.buscarResumoPedidoParaCliente(
+                    estabelecimento.getId(),
+                    idPedido,
+                    whatsappCliente
+                );
+
+                if (pedido == null || pedido.getStatus() == null) {
+                    return new RoteamentoResultado(
+                        "revisao_pedido_nao_encontrado",
+                        msg.texto(whatsappCliente, "Não encontrei esse pedido para revisão.")
+                    );
+                }
+
+                if (pedido.getStatus() != StatusPedido.CRIADO) {
+                    MensagemWhatsappSaidaDTO tela = montarTelaRevisaoPedido(estabelecimento, whatsappCliente, pedido);
+                    MensagemWhatsappSaidaDTO aviso = msg.texto(
+                        whatsappCliente,
+                        "⚠️ Você só pode *adicionar itens* enquanto o pedido está *aguardando confirmação*."
+                    );
+                    return new RoteamentoResultado("revisao_bloqueio_adicionar_itens", aviso, List.of(tela));
+                }
+
+                return new RoteamentoResultado(
+                    "revisao_lista_categorias",
+                    montarListaCategoriasRevisao(estabelecimento, whatsappCliente, idPedido)
+                );
+            }
+
+            case "REVISAO_LISTA_PRODUTOS": {
+                Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+                Long idCategoria = parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Integer quantidadeMultipla = parseIntObrigatorio(cmd.getParte(4), "quantidadeMultipla");
+
+                PedidoResponseDTO pedido = pedidoService.buscarResumoPedidoParaCliente(
+                    estabelecimento.getId(),
+                    idPedido,
+                    whatsappCliente
+                );
+
+                if (pedido == null || pedido.getStatus() == null) {
+                    return new RoteamentoResultado(
+                        "revisao_pedido_nao_encontrado",
+                        msg.texto(whatsappCliente, "Não encontrei esse pedido para revisão.")
+                    );
+                }
+
+                if (pedido.getStatus() != StatusPedido.CRIADO) {
+                    MensagemWhatsappSaidaDTO tela = montarTelaRevisaoPedido(estabelecimento, whatsappCliente, pedido);
+                    MensagemWhatsappSaidaDTO aviso = msg.texto(
+                        whatsappCliente,
+                        "⚠️ Você só pode *adicionar itens* enquanto o pedido está *aguardando confirmação*."
+                    );
+                    return new RoteamentoResultado("revisao_bloqueio_listar_produtos", aviso, List.of(tela));
+                }
+
+                return new RoteamentoResultado(
+                    "revisao_lista_produtos",
+                    montarListaProdutosPorCategoriaPaginadaRevisao(estabelecimento, whatsappCliente, idPedido, idCategoria, quantidadeMultipla, 0)
+                );
+            }
+
+            case "REVISAO_LISTA_PRODUTOS_PAG": {
+                Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+                Long idCategoria = parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Integer quantidadeMultipla = parseIntObrigatorio(cmd.getParte(4), "quantidadeMultipla");
+                Integer offset = parseIntObrigatorio(cmd.getParte(5), "offset");
+
+                PedidoResponseDTO pedido = pedidoService.buscarResumoPedidoParaCliente(
+                    estabelecimento.getId(),
+                    idPedido,
+                    whatsappCliente
+                );
+
+                if (pedido == null || pedido.getStatus() == null) {
+                    return new RoteamentoResultado(
+                        "revisao_pedido_nao_encontrado",
+                        msg.texto(whatsappCliente, "Não encontrei esse pedido para revisão.")
+                    );
+                }
+
+                if (pedido.getStatus() != StatusPedido.CRIADO) {
+                    MensagemWhatsappSaidaDTO tela = montarTelaRevisaoPedido(estabelecimento, whatsappCliente, pedido);
+                    MensagemWhatsappSaidaDTO aviso = msg.texto(
+                        whatsappCliente,
+                        "⚠️ Você só pode *adicionar itens* enquanto o pedido está *aguardando confirmação*."
+                    );
+                    return new RoteamentoResultado("revisao_bloqueio_listar_produtos_pag", aviso, List.of(tela));
+                }
+
+                return new RoteamentoResultado(
+                    "revisao_lista_produtos",
+                    montarListaProdutosPorCategoriaPaginadaRevisao(estabelecimento, whatsappCliente, idPedido, idCategoria, quantidadeMultipla, offset)
+                );
+            }
+
+            case "REVISAO_LISTAR_QUANTIDADES": {
+                Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+                Long idCategoria = parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Integer quantidadeMultipla = parseIntObrigatorio(cmd.getParte(4), "quantidadeMultipla");
+                Long idProduto = parseLongObrigatorio(cmd.getParte(5), "idProduto");
+
+                PedidoResponseDTO pedido = pedidoService.buscarResumoPedidoParaCliente(
+                    estabelecimento.getId(),
+                    idPedido,
+                    whatsappCliente
+                );
+
+                if (pedido == null || pedido.getStatus() == null) {
+                    return new RoteamentoResultado(
+                        "revisao_pedido_nao_encontrado",
+                        msg.texto(whatsappCliente, "Não encontrei esse pedido para revisão.")
+                    );
+                }
+
+                if (pedido.getStatus() != StatusPedido.CRIADO) {
+                    MensagemWhatsappSaidaDTO tela = montarTelaRevisaoPedido(estabelecimento, whatsappCliente, pedido);
+                    MensagemWhatsappSaidaDTO aviso = msg.texto(
+                        whatsappCliente,
+                        "⚠️ Você só pode *adicionar itens* enquanto o pedido está *aguardando confirmação*."
+                    );
+                    return new RoteamentoResultado("revisao_bloqueio_listar_quantidades", aviso, List.of(tela));
+                }
+
+                return new RoteamentoResultado(
+                    "revisao_listar_quantidades",
+                    montarListaQuantidadesRevisao(estabelecimento, whatsappCliente, idPedido, idCategoria, quantidadeMultipla, idProduto)
+                );
+            }
+
+	        case "REVISAO_ADICIONAR_PRODUTO": {
+	            Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+	            Long idProduto = parseLongObrigatorio(cmd.getParte(3), "idProduto");
+	            Integer quantidade = parseIntObrigatorio(cmd.getParte(4), "quantidade");
+	            return tratarRevisaoAdicionarProduto(estabelecimento, whatsappCliente, idPedido, idProduto, quantidade);
+	        }
+
+	        case "REVISAO_CANCELAR_PEDIDO": {
+	            Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+	            return tratarRevisaoCancelarPedido(estabelecimento, whatsappCliente, idPedido);
+	        }
+
+	        case "REVISAO_CONFIRMAR_ENTREGA": {
+	            Long idPedido = parseLongObrigatorio(cmd.getParte(2), "idPedido");
+	            return tratarRevisaoConfirmarEntrega(estabelecimento, whatsappCliente, idPedido);
+	        }
 	        default:
 	            return new RoteamentoResultado("comando_desconhecido", montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente));
 	    }
@@ -949,6 +1144,91 @@ public class OrquestradorWhatsappService {
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
+	        //===============ENTREGAS=================
+	        case "ADMIN_ENTREGAS_MENU": {
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.montarMenuEntregas(estabelecimento, whatsappAdmin);
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        case "ADMIN_ENTREGAS_CEP_MENU": {
+
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.iniciarCadastroCepLojaPorDigitacao(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idSessao
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
+	        case "ADMIN_ENTREGAS_CEP_DIGITAR": {
+
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.iniciarCadastroCepLojaPorDigitacao(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idSessao
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        case "ADMIN_ENTREGAS_TAXAS_MENU": {
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.montarMenuTaxasEntrega(estabelecimento, whatsappAdmin);
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        case "ADMIN_ENTREGAS_TAXA_PADRAO_MENU": {
+	            // no próximo passo: iniciar fluxo de digitação do valor (taxa padrão)
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.montarMenuTaxaPadrao(estabelecimento, whatsappAdmin);
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        case "ADMIN_ENTREGAS_BAIRROS_MENU": {
+	            Integer offset = parseIntDefaultZero(cmd.getParte(2));
+
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.montarMenuTaxaPorBairros(estabelecimento, whatsappAdmin, offset);
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        case "ADMIN_ENTREGAS_BAIRRO_SELECIONAR": {
+	            Long idBairro = parseLongObrigatorio(cmd.getParte(2), "idBairro");
+	            Integer offset = parseIntDefaultZero(cmd.getParte(3));
+
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.iniciarCadastroTaxaEntregaBairroPorDigitacao(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idSessao,
+	                    idBairro,
+	                    offset
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
+	        case "ADMIN_ENTREGAS_TAXA_PADRAO_DIGITAR": {
+	            // offsetVoltar: pode ser 0 ou vir em cmd.getParte(2)
+	            Integer offsetVoltar = parseIntDefaultZero(cmd.getParte(2));
+
+	            AdministradorWhatsappService.ResultadoAdmin r =
+	                administradorWhatsappService.iniciarCadastroTaxaEntregaPadraoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idSessao,
+	                    offsetVoltar
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 	        default: {
 	            AdministradorWhatsappService.ResultadoAdmin r =
 	                administradorWhatsappService.montarMenuAdmin(estabelecimento, whatsappAdmin);
@@ -1028,7 +1308,7 @@ public class OrquestradorWhatsappService {
                 return new RoteamentoResultado("troco_valor", montarSolicitacaoTrocoValor(whatsappCliente));
             }
 
-            return new RoteamentoResultado("confirmacao_final", montarConfirmacaoFinalAntesDeEnviar(whatsappCliente, s));
+            return new RoteamentoResultado("confirmacao_final", montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, s));
         }
 
         String enderecoAnterior = clienteService
@@ -1068,16 +1348,6 @@ public class OrquestradorWhatsappService {
 	        sessaoService.marcarAguardandoEnderecoEntrega(idSessao);
 
 	        MensagemWhatsappSaidaDTO m = montarSolicitacaoEnderecoEntrega(whatsappCliente);
-
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.ENDERECO_ENTREGA,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            m
-	        );
-
 	        return new RoteamentoResultado("solicitar_endereco_entrega", m);
 	    }
 
@@ -1085,126 +1355,69 @@ public class OrquestradorWhatsappService {
 	    sessaoService.marcarAguardandoFormaPagamento(idSessao);
 
 	    MensagemWhatsappSaidaDTO m = montarEscolhaFormaPagamento(whatsappCliente);
-
-	    retryService.agendarRetriesSeNecessario(
-	        idSessao,
-	        WhatsappPerguntaRetryService.EtapaBloqueante.FORMA_PAGAMENTO,
-	        whatsappCliente,
-	        whatsappReceptor,
-	        phoneNumberId,
-	        m
-	    );
-
 	    return new RoteamentoResultado("forma_pagamento_menu", m);
 	}
 
     private RoteamentoResultado tratarSelecaoPagamento(
-	    String whatsappCliente,
-	    String whatsappReceptor,
-	    String phoneNumberId,
-	    Long idSessao,
-	    String rawTipo
-	) {
+            Estabelecimento estabelecimento,
+            String whatsappCliente,
+            String whatsappReceptor,
+            String phoneNumberId,
+            Long idSessao,
+            String rawTipo
+    ) {
+        FormaPagamentoPedido fp = parseFormaPagamento(rawTipo);
 
-	    FormaPagamentoPedido fp = parseFormaPagamento(rawTipo);
+        sessaoService.salvarFormaPagamento(idSessao, fp);
 
-	    sessaoService.salvarFormaPagamento(idSessao, fp);
+        if (fp == FormaPagamentoPedido.DINHEIRO) {
+            sessaoService.marcarAguardandoTrocoConfirmacao(idSessao);
 
-	    if (fp == FormaPagamentoPedido.DINHEIRO) {
-	        sessaoService.marcarAguardandoTrocoConfirmacao(idSessao);
+            MensagemWhatsappSaidaDTO m = montarPerguntaTrocoSimNao(whatsappCliente);
+            return new RoteamentoResultado("troco_confirmacao", m);
+        }
 
-	        MensagemWhatsappSaidaDTO m = montarPerguntaTrocoSimNao(whatsappCliente);
+        SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
 
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.TROCO_CONFIRMACAO,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            m
-	        );
+        sessaoService.marcarAguardandoConfirmacaoFinal(idSessao);
+        MensagemWhatsappSaidaDTO m = montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, s);
 
-	        return new RoteamentoResultado("troco_confirmacao", m);
-	    }
-
-	    SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
-
-	    sessaoService.marcarAguardandoConfirmacaoFinal(idSessao);
-	    MensagemWhatsappSaidaDTO m = montarConfirmacaoFinalAntesDeEnviar(whatsappCliente, s);
-
-	    retryService.agendarRetriesSeNecessario(
-	        idSessao,
-	        WhatsappPerguntaRetryService.EtapaBloqueante.CONFIRMACAO_FINAL,
-	        whatsappCliente,
-	        whatsappReceptor,
-	        phoneNumberId,
-	        m
-	    );
-
-	    return new RoteamentoResultado("confirmacao_final", m);
-	}
+        return new RoteamentoResultado("confirmacao_final", m);
+    }
 
     private RoteamentoResultado tratarTroco(
-	    String whatsappCliente,
-	    String whatsappReceptor,
-	    String phoneNumberId,
-	    Long idSessao,
-	    String escolha
-	) {
+            Estabelecimento estabelecimento,
+            String whatsappCliente,
+            String whatsappReceptor,
+            String phoneNumberId,
+            Long idSessao,
+            String escolha
+    ) {
 
-	    if ("NAO".equalsIgnoreCase(escolha)) {
-	        sessaoService.salvarTrocoNecessidade(idSessao, false);
+        if ("NAO".equalsIgnoreCase(escolha)) {
+            sessaoService.salvarTrocoNecessidade(idSessao, false);
 
-	        SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
+            SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
 
-	        sessaoService.marcarAguardandoConfirmacaoFinal(idSessao);
-	        MensagemWhatsappSaidaDTO m = montarConfirmacaoFinalAntesDeEnviar(whatsappCliente, s);
+            sessaoService.marcarAguardandoConfirmacaoFinal(idSessao);
+            MensagemWhatsappSaidaDTO m = montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, s);
 
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.CONFIRMACAO_FINAL,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            m
-	        );
+            return new RoteamentoResultado("confirmacao_final", m);
+        }
 
-	        return new RoteamentoResultado("confirmacao_final", m);
-	    }
+        if ("SIM".equalsIgnoreCase(escolha)) {
+            sessaoService.salvarTrocoNecessidade(idSessao, true);
+            sessaoService.marcarAguardandoTrocoValor(idSessao);
 
-	    if ("SIM".equalsIgnoreCase(escolha)) {
-	        sessaoService.salvarTrocoNecessidade(idSessao, true);
-	        sessaoService.marcarAguardandoTrocoValor(idSessao);
+            MensagemWhatsappSaidaDTO m = montarSolicitacaoTrocoValor(whatsappCliente);
+            return new RoteamentoResultado("troco_valor", m);
+        }
 
-	        MensagemWhatsappSaidaDTO m = montarSolicitacaoTrocoValor(whatsappCliente);
+        sessaoService.marcarAguardandoTrocoConfirmacao(idSessao);
 
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.TROCO_VALOR,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            m
-	        );
-
-	        return new RoteamentoResultado("troco_valor", m);
-	    }
-
-	    sessaoService.marcarAguardandoTrocoConfirmacao(idSessao);
-
-	    MensagemWhatsappSaidaDTO m = montarPerguntaTrocoSimNao(whatsappCliente);
-
-	    retryService.agendarRetriesSeNecessario(
-	        idSessao,
-	        WhatsappPerguntaRetryService.EtapaBloqueante.TROCO_CONFIRMACAO,
-	        whatsappCliente,
-	        whatsappReceptor,
-	        phoneNumberId,
-	        m
-	    );
-
-	    return new RoteamentoResultado("troco_confirmacao", m);
-	}
+        MensagemWhatsappSaidaDTO m = montarPerguntaTrocoSimNao(whatsappCliente);
+        return new RoteamentoResultado("troco_confirmacao", m);
+    }
 
     private RoteamentoResultado tratarEnvioPedidoDefinitivo(
         Estabelecimento estabelecimento,
@@ -1445,26 +1658,66 @@ public class OrquestradorWhatsappService {
     }
 
     private MensagemWhatsappSaidaDTO montarConfirmacaoFinalAntesDeEnviar(
-        String whatsappCliente,
-        SessaoAtendimentoWhatsapp s
+            Estabelecimento estabelecimento,
+            String whatsappCliente,
+            SessaoAtendimentoWhatsapp s
     ) {
 
         String pagamento = formatarPagamentoParaTexto(s);
 
+        Map<Long, Integer> carrinho = montarCarrinhoAtual(s.getId());
+
+        String itensTexto = "(sem itens)";
+        BigDecimal total = BigDecimal.ZERO;
+
+        if (carrinho != null && !carrinho.isEmpty()) {
+
+            StringBuilder sb = new StringBuilder();
+
+            for (var e : carrinho.entrySet()) {
+
+                Long idProduto = e.getKey();
+                int qtd = e.getValue() == null ? 0 : e.getValue();
+
+                Produto p = extrairProduto(estabelecimento, idProduto);
+
+                String nome = (p == null ? ("Produto #" + idProduto) : msg.safe(p.getNome()));
+
+                BigDecimal subtotal = (p == null ? BigDecimal.ZERO : calcularPrecoPorQuantidade(p, qtd));
+                total = total.add(subtotal);
+
+                sb.append("- ")
+                    .append(nome)
+                    .append(" x").append(qtd)
+                    .append(" = ").append(msg.formatarMoeda(subtotal))
+                    .append("\n");
+            }
+
+            itensTexto = sb.toString().trim();
+        }
+
+        String endereco = msg.trunc(msg.safe(s.getEnderecoEntrega()), 650);
+
+        String obs = msg.safe(s.getObservacoesEntrega());
+        String obsFmt = StringUtils.hasText(obs)
+            ? ("\n*Obs:* " + msg.trunc(obs, 250) + "\n")
+            : "\n";
+
         String corpo =
-            "✅ Quase lá!\n\n" +
-                "*Endereço:*\n" +
-                "*" + msg.trunc(msg.safe(s.getEnderecoEntrega()), 900) + "*\n" +
-                (StringUtils.hasText(s.getObservacoesEntrega())
-                    ? ("\n*Obs:* " + msg.trunc(msg.safe(s.getObservacoesEntrega()), 300) + "\n")
-                    : "\n") +
-                "\n*Pagamento:* " + pagamento + "\n\n" +
-                "Deseja enviar o pedido para o estabelecimento?";
+            "🔎 *Revise seu pedido antes de enviar*\n\n" +
+                "🛒 *Itens:*\n" +
+                msg.trunc(itensTexto, 650) + "\n\n" +
+                "*Total:* " + msg.formatarMoeda(total) + "\n\n" +
+                "📍 *Entrega:*\n" +
+                "*" + endereco + "*\n" +
+                obsFmt +
+                "💳 *Pagamento:* " + pagamento + "\n\n" +
+                "Se estiver tudo certo, confirme o envio ✅";
 
         List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
-            btn("COMANDO|ENVIAR_PEDIDO", "✅ Enviar pedido"),
-            btn("COMANDO|VISUALIZAR_CARRINHO", "🛒 Ver o carrinho"),
-            btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Comprar mais")
+            btn("COMANDO|ENVIAR_PEDIDO", "✅ Confirmar e enviar"),
+            btn("COMANDO|VISUALIZAR_CARRINHO", "✏️ Ajustar carrinho"),
+            btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Adicionar itens")
         );
 
         return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
@@ -1565,7 +1818,7 @@ public class OrquestradorWhatsappService {
         sessaoService.salvarTrocoValor(idSessao, valor);
 
         SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
-        return montarConfirmacaoFinalAntesDeEnviar(whatsappCliente, s);
+        return montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, s);
     }
 
     private ParsedEndereco parseEnderecoEObservacoes(String raw) {
@@ -1600,174 +1853,8 @@ public class OrquestradorWhatsappService {
         return best;
     }
     
-    //=======================================================================
-    // RETRY DE ENVIO
-    //=======================================================================
-    private void agendarRetrySeBloqueante(
-	    Long idSessao,
-	    String whatsappCliente,
-	    String whatsappReceptor,
-	    String phoneNumberId,
-	    MensagemWhatsappSaidaDTO mensagemSaida
-	) {
-
-	    if (idSessao == null || mensagemSaida == null) return;
-
-	    if (sessaoService.isAguardandoEnderecoEntrega(idSessao)) {
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.ENDERECO_ENTREGA,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            mensagemSaida
-	        );
-	        return;
-	    }
-
-	    if (sessaoService.isAguardandoFormaPagamento(idSessao)) {
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.FORMA_PAGAMENTO,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            mensagemSaida
-	        );
-	        return;
-	    }
-
-	    if (sessaoService.isAguardandoTrocoConfirmacao(idSessao)) {
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.TROCO_CONFIRMACAO,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            mensagemSaida
-	        );
-	        return;
-	    }
-
-	    if (sessaoService.isAguardandoTrocoValor(idSessao)) {
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.TROCO_VALOR,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            mensagemSaida
-	        );
-	        return;
-	    }
-
-	    if (sessaoService.isAguardandoConfirmacaoFinal(idSessao)) {
-	        retryService.agendarRetriesSeNecessario(
-	            idSessao,
-	            WhatsappPerguntaRetryService.EtapaBloqueante.CONFIRMACAO_FINAL,
-	            whatsappCliente,
-	            whatsappReceptor,
-	            phoneNumberId,
-	            mensagemSaida
-	        );
-	    }
-	}
-
-	private MensagemWhatsappSaidaDTO montarReenvioUltimaPerguntaBloqueante(
-	    Estabelecimento estabelecimento,
-	    String whatsappCliente,
-	    Long idSessao
-	) {
-
-	    if (sessaoService.isAguardandoEnderecoEntrega(idSessao)) {
-	        return msg.texto(
-	            whatsappCliente,
-	            "⚠️ Não consegui processar sua opção. Por favor, responda novamente.\n\n"
-	                + msg.safe(montarSolicitacaoEnderecoEntrega(whatsappCliente).getText().getBody())
-	        );
-	    }
-
-	    if (sessaoService.isAguardandoFormaPagamento(idSessao)) {
-	        return montarEscolhaFormaPagamentoComPrefixo(whatsappCliente);
-	    }
-
-	    if (sessaoService.isAguardandoTrocoConfirmacao(idSessao)) {
-	        return montarPerguntaTrocoSimNaoComPrefixo(whatsappCliente);
-	    }
-
-	    if (sessaoService.isAguardandoTrocoValor(idSessao)) {
-	        return msg.texto(
-	            whatsappCliente,
-	            "⚠️ Não consegui processar sua opção. Por favor, responda novamente.\n\n"
-	                + msg.safe(montarSolicitacaoTrocoValor(whatsappCliente).getText().getBody())
-	        );
-	    }
-
-	    if (sessaoService.isAguardandoConfirmacaoFinal(idSessao)) {
-	        SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
-	        return montarConfirmacaoFinalAntesDeEnviarComPrefixo(whatsappCliente, s);
-	    }
-
-	    return montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente);
-	}
-
-	private MensagemWhatsappSaidaDTO montarEscolhaFormaPagamentoComPrefixo(String whatsappCliente) {
-
-	    String corpo =
-	        "⚠️ Não consegui processar sua opção. Por favor, responda novamente.\n\n"
-	            + "Como deseja pagar?\n\n"
-	            + "Escolha uma opção:";
-
-	    List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
-	        btn("COMANDO|SELECIONAR_PAGAMENTO|DINHEIRO", "💵 Dinheiro"),
-	        btn("COMANDO|SELECIONAR_PAGAMENTO|CREDITO", "💳 Cartão (Crédito)"),
-	        btn("COMANDO|SELECIONAR_PAGAMENTO|DEBITO_PIX", "🏧 Débito/PIX")
-	    );
-
-	    return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
-	}
-
-	private MensagemWhatsappSaidaDTO montarPerguntaTrocoSimNaoComPrefixo(String whatsappCliente) {
-
-	    String corpo =
-	        "⚠️ Não consegui processar sua opção. Por favor, responda novamente.\n\n"
-	            + "Você precisa de troco?\n\n"
-	            + "Escolha uma opção:";
-
-	    List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
-	        btn("COMANDO|TROCO|NAO", "✅ Não"),
-	        btn("COMANDO|TROCO|SIM", "💵 Sim, preciso")
-	    );
-
-	    return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
-	}
-
-	private MensagemWhatsappSaidaDTO montarConfirmacaoFinalAntesDeEnviarComPrefixo(
-	    String whatsappCliente,
-	    SessaoAtendimentoWhatsapp s
-	) {
-
-	    String pagamento = formatarPagamentoParaTexto(s);
-
-	    String corpo =
-	        "⚠️ Não consegui processar sua opção. Por favor, responda novamente.\n\n"
-	            + "✅ Quase lá!\n\n"
-	            + "*Endereço:*\n"
-	            + "*" + msg.trunc(msg.safe(s.getEnderecoEntrega()), 900) + "*\n"
-	            + (StringUtils.hasText(s.getObservacoesEntrega())
-	                ? ("\n*Obs:* " + msg.trunc(msg.safe(s.getObservacoesEntrega()), 300) + "\n")
-	                : "\n")
-	            + "\n*Pagamento:* " + pagamento + "\n\n"
-	            + "Deseja enviar o pedido para o estabelecimento?";
-
-	    List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
-	        btn("COMANDO|ENVIAR_PEDIDO", "✅ Enviar pedido"),
-	        btn("COMANDO|VISUALIZAR_CARRINHO", "🛒 Ver o carrinho"),
-	        btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Comprar mais")
-	    );
-
-	    return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
-	}
+    
+	
 
     // ======================================================================
     // MENUS / LISTAS / CARRINHO
@@ -2073,30 +2160,33 @@ public class OrquestradorWhatsappService {
     // ======================================================================
 
     private MensagemWhatsappSaidaDTO montarConfirmacaoPedidoEnviado(
-        String whatsappCliente,
-        Long idPedido,
-        SessaoAtendimentoWhatsapp sessao,
-        String resumoItens,
-        BigDecimal total
+            String whatsappCliente,
+            Long idPedido,
+            SessaoAtendimentoWhatsapp sessao,
+            String resumoItens,
+            BigDecimal total
     ) {
 
         String endereco = sessao == null ? "" : msg.safe(sessao.getEnderecoEntrega());
         String pagamento = formatarPagamentoParaTexto(sessao);
 
+        String itens = msg.safe(resumoItens);
+        itens = StringUtils.hasText(itens) ? itens : "(sem itens)";
+
         String corpo =
-            "✅ Pedido enviado!\n\n" +
-                "Número do pedido: *#" + idPedido + "*\n" +
-                "Aguardando confirmação do estabelecimento. 🙂\n\n" +
-                "*Resumo do pedido*\n\n" +
-                "*Entrega:*\n" +
+            "✅ *Pedido enviado com sucesso!*\n\n" +
+                "📌 *Pedido:* #" + idPedido + "\n" +
+                "⏳ *Status:* aguardando confirmação do estabelecimento\n\n" +
+                "🛒 *Itens:*\n" +
+                msg.trunc(itens, 1400) + "\n\n" +
+                "💰 *Total:* " + msg.formatarMoeda(total) + "\n\n" +
+                "📍 *Entrega:*\n" +
                 msg.trunc(endereco, 700) + "\n\n" +
-                "*Pagamento:* " + pagamento + "\n\n" +
-                "*Itens:*\n" +
-                msg.trunc(msg.safe(resumoItens), 1200) + "\n\n" +
-                "*Total:* " + msg.formatarMoeda(total) + "\n\n" +
-                "Você receberá atualizações quando:\n" +
+                "💳 *Pagamento:* " + pagamento + "\n\n" +
+                "Você vai receber atualizações quando:\n" +
                 "- o pedido for *aceito*\n" +
-                "- o pedido *sair para entrega*";
+                "- o pedido *sair para entrega*\n\n" +
+                "Se precisar, envie *MENU* para voltar ao início.";
 
         return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
     }
@@ -2157,6 +2247,455 @@ public class OrquestradorWhatsappService {
         return sb.toString().trim();
     }
 
+    
+    // ======================================================================
+    // REVISÃO DO ÚLTIMO PEDIDO (cliente)
+    // ======================================================================
+
+    private RoteamentoResultado tratarUltimoPedidoParaRevisao(
+        Estabelecimento estabelecimento,
+        String whatsappCliente
+    ) {
+
+        // ✅ você já tem PedidoService; aqui usamos um método que PRECISA existir no seu PedidoService:
+        // buscarUltimoPedidoDoCliente(estabelecimentoId, whatsappCliente)
+        PedidoResponseDTO ultimo = pedidoService.buscarUltimoPedidoDoCliente(estabelecimento.getId(), whatsappCliente);
+
+        if (ultimo == null || ultimo.getId() == null) {
+            MensagemWhatsappSaidaDTO saida = msg.botoes(
+                whatsappCliente,
+                msg.trunc("Não encontrei pedidos recentes para revisar. 🛒", 1024),
+                List.of(
+                    btn("COMANDO|FAZER_PEDIDO", "🛍️ Fazer um pedido"),
+                    btn("COMANDO|MENU", "⬅️ Menu")
+                )
+            );
+            return new RoteamentoResultado("revisao_sem_pedidos", saida);
+        }
+
+        return tratarTelaRevisaoPedido(estabelecimento, whatsappCliente, ultimo.getId());
+    }
+
+    private RoteamentoResultado tratarTelaRevisaoPedido(
+        Estabelecimento estabelecimento,
+        String whatsappCliente,
+        Long idPedido
+    ) {
+
+        PedidoResponseDTO pedido = pedidoService.buscarResumoPedidoParaCliente(estabelecimento.getId(), idPedido, whatsappCliente);
+
+        if (pedido == null) {
+            return new RoteamentoResultado(
+                "revisao_pedido_nao_encontrado",
+                msg.texto(whatsappCliente, "Não encontrei esse pedido para revisão.")
+            );
+        }
+
+        MensagemWhatsappSaidaDTO tela = montarTelaRevisaoPedido(estabelecimento, whatsappCliente, pedido);
+
+        return new RoteamentoResultado("revisao_pedido_tela", tela);
+    }
+
+    private MensagemWhatsappSaidaDTO montarTelaRevisaoPedido(
+        Estabelecimento estabelecimento,
+        String whatsappCliente,
+        PedidoResponseDTO pedido
+    ) {
+
+        StatusPedido st = pedido == null ? null : pedido.getStatus();
+
+        String resumoItens = msg.safe(pedido == null ? null : pedido.getResumoItens());
+        if (!StringUtils.hasText(resumoItens)) {
+            resumoItens = "(sem itens)";
+        }
+
+        String totalFmt = msg.formatarMoeda(
+            (pedido == null || pedido.getTotal() == null) ? BigDecimal.ZERO : pedido.getTotal()
+        );
+
+        String statusLabel;
+
+        if (StringUtils.hasText(msg.safe(pedido == null ? null : pedido.getStatusLabel()))) {
+            statusLabel = msg.safe(pedido.getStatusLabel());
+        } else {
+            statusLabel = formatarStatusFallback(st);
+        }
+
+        String corpo =
+            "🔎 *Revisão do pedido*\n\n" +
+                "📌 *Pedido:* #" + (pedido == null ? "" : pedido.getId()) + "\n" +
+                "⏳ *Status:* " + statusLabel + "\n\n" +
+                "🛒 *Itens:*\n" +
+                msg.trunc(resumoItens, 1400) + "\n\n" +
+                "💰 *Total:* " + totalFmt + "\n\n" +
+                "O que deseja fazer?";
+
+        List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = new ArrayList<>();
+
+        if (st == StatusPedido.CRIADO) {
+            botoes.add(btn("COMANDO|REVISAO_ADICIONAR_ITENS|" + pedido.getId(), "➕ Adicionar itens"));
+            botoes.add(btn("COMANDO|REVISAO_CANCELAR_PEDIDO|" + pedido.getId(), "🗑️ Cancelar"));
+        } else if (st == StatusPedido.EM_PREPARO) {
+            botoes.add(btn("COMANDO|REVISAO_CANCELAR_PEDIDO|" + pedido.getId(), "🗑️ Cancelar"));
+        } else if (st == StatusPedido.PRONTO) {
+            botoes.add(btn("COMANDO|REVISAO_CONFIRMAR_ENTREGA|" + pedido.getId(), "✅ Confirmar entrega"));
+        }
+
+        botoes.add(btn("COMANDO|MENU", "⬅️ Menu"));
+
+        return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
+    }
+
+    private String formatarStatusFallback(StatusPedido st) {
+        if (st == null) return "desconhecido";
+        switch (st) {
+            case CRIADO:
+                return "aguardando confirmação do estabelecimento";
+            case EM_PREPARO:
+                return "em preparo";
+            case PRONTO:
+                return "saiu para entrega";
+            case ENTREGUE:
+                return "entregue";
+            case CANCELADO:
+                return "cancelado";
+            default:
+                return st.name();
+        }
+    }
+
+    
+
+    // ======================================================================
+    // REVISÃO: adicionar itens (navegação por listas com idPedido no comando)
+    // ======================================================================
+
+    private MensagemWhatsappSaidaDTO montarListaCategoriasRevisao(
+        Estabelecimento estabelecimento,
+        String whatsappCliente,
+        Long idPedido
+    ) {
+
+        List<CategoriaProduto> categorias = extrairCategoriasDoEstabelecimento(estabelecimento);
+
+        if (categorias.isEmpty()) {
+            return msg.texto(whatsappCliente, "No momento não encontrei categorias disponíveis para este estabelecimento.");
+        }
+
+        String cabecalho =
+            "➕ Adicionar itens\n\n" +
+                "Pedido #" + idPedido + "\n" +
+                "Escolha uma categoria:";
+
+        List<MensagemInterativaItemListaWhatsappDTO> itens = categorias.stream()
+            .sorted(Comparator.comparing(c -> msg.safe(c.getNome()), String.CASE_INSENSITIVE_ORDER))
+            .map(c -> {
+                Integer qm = c.getQuantidadeMultipla() == null ? 1 : c.getQuantidadeMultipla();
+                return row(
+                    "COMANDO|REVISAO_LISTA_PRODUTOS|" + idPedido + "|" + c.getId() + "|" + qm,
+                    msg.safe(c.getNome()),
+                    "Clique para ver produtos"
+                );
+            })
+            .collect(Collectors.toList());
+
+        return msg.lista(whatsappCliente, cabecalho, "Categorias", "Categorias", itens);
+    }
+
+    private MensagemWhatsappSaidaDTO montarListaProdutosPorCategoriaPaginadaRevisao(
+        Estabelecimento estabelecimento,
+        String whatsappCliente,
+        Long idPedido,
+        Long idCategoria,
+        Integer quantidadeMultipla,
+        Integer offset
+    ) {
+
+        List<Produto> produtos = extrairProdutosPorCategoria(estabelecimento, idCategoria);
+
+        if (produtos.isEmpty()) {
+            return msg.texto(whatsappCliente, "Não encontrei produtos para esta categoria.");
+        }
+
+        int safeOffset = (offset == null || offset < 0) ? 0 : offset;
+        int pageSizeProdutos = 9;
+
+        List<Produto> ordenados = produtos.stream()
+            .filter(Objects::nonNull)
+            .sorted(Comparator.comparing(p -> msg.safe(p.getNome()), String.CASE_INSENSITIVE_ORDER))
+            .collect(Collectors.toList());
+
+        int total = ordenados.size();
+        if (safeOffset >= total) safeOffset = 0;
+
+        int endExclusive = Math.min(safeOffset + pageSizeProdutos, total);
+        List<Produto> page = ordenados.subList(safeOffset, endExclusive);
+
+        String nomeCategoria = extrairNomeCategoria(estabelecimento, idCategoria);
+        String tituloCategoria = (nomeCategoria == null ? ("Categoria #" + idCategoria) : nomeCategoria);
+
+        int paginaAtual = (safeOffset / pageSizeProdutos) + 1;
+        int paginasTotal = (int) Math.ceil(total / (double) pageSizeProdutos);
+
+        String cabecalho =
+            "➕ Adicionar itens (Pedido #" + idPedido + ")\n" +
+                "Produtos - " + tituloCategoria + ":\n" +
+                "Página " + paginaAtual + " de " + paginasTotal;
+
+        List<MensagemInterativaItemListaWhatsappDTO> itens = page.stream()
+            .map(p -> {
+                String nome = msg.safe(p.getNome());
+                String preco = msg.formatarMoeda(p.getPreco());
+
+                String title = msg.trunc(nome + " • " + preco, 24);
+
+                String desc = msg.safe(p.getDescricao());
+                String description = StringUtils.hasText(desc)
+                    ? msg.trunc(desc, 72)
+                    : msg.trunc("Unit: " + preco, 72);
+
+                return MensagemInterativaItemListaWhatsappDTO.builder()
+                    .id("COMANDO|REVISAO_LISTAR_QUANTIDADES|" + idPedido + "|" + idCategoria + "|" + quantidadeMultipla + "|" + p.getId())
+                    .title(title)
+                    .description(description)
+                    .build();
+            })
+            .collect(Collectors.toList());
+
+        if (endExclusive < total) {
+            int nextOffset = endExclusive;
+            itens.add(row(
+                "COMANDO|REVISAO_LISTA_PRODUTOS_PAG|" + idPedido + "|" + idCategoria + "|" + quantidadeMultipla + "|" + nextOffset,
+                "➡️ Mais produtos",
+                "Ver próxima página"
+            ));
+        }
+
+        return msg.lista(
+            whatsappCliente,
+            msg.truncWord(cabecalho, 1024),
+            msg.truncWord("Produtos", 20),
+            msg.truncWord("Produtos", 24),
+            itens
+        );
+    }
+
+    private MensagemWhatsappSaidaDTO montarListaQuantidadesRevisao(
+        Estabelecimento estabelecimento,
+        String whatsappCliente,
+        Long idPedido,
+        Long idCategoria,
+        Integer quantidadeMultipla,
+        Long idProduto
+    ) {
+
+        Produto produto = extrairProduto(estabelecimento, idProduto);
+
+        if (produto == null) {
+            return msg.texto(whatsappCliente, "Produto não encontrado.");
+        }
+
+        int qm = (quantidadeMultipla == null || quantidadeMultipla < 1) ? 1 : quantidadeMultipla;
+
+        List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
+
+        for (int i = 1; i <= 9; i++) {
+            int quantidade = qm * i;
+            BigDecimal preco = calcularPrecoPorQuantidade(produto, quantidade);
+
+            itens.add(row(
+                "COMANDO|REVISAO_ADICIONAR_PRODUTO|" + idPedido + "|" + idProduto + "|" + quantidade,
+                quantidade + " unidades",
+                "Valor total: " + msg.formatarMoeda(preco)
+            ));
+        }
+
+        String cabecalho =
+            "➕ Adicionar itens (Pedido #" + idPedido + ")\n\n" +
+                "Quantidades - " + msg.safe(produto.getNome()) + "\n" +
+                "Escolha uma opção:";
+
+        return msg.lista(whatsappCliente, cabecalho, "Quantidades", "Quantidades", itens);
+    }
+
+    // ======================================================================
+    // REVISÃO: ações que alteram o pedido (e notificam admins)
+    // ======================================================================
+
+    private RoteamentoResultado tratarRevisaoAdicionarProduto(
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    Long idPedido,
+	    Long idProduto,
+	    Integer quantidade
+	) {
+
+	    if (quantidade == null || quantidade < 1) {
+	        return new RoteamentoResultado(
+	            "revisao_quantidade_invalida",
+	            msg.texto(whatsappCliente, "Quantidade inválida.")
+	        );
+	    }
+
+	    // Atualiza pedido (retorna DTO para cliente)
+	    PedidoResponseDTO atualizado = pedidoService.adicionarItemNoPedidoDoCliente(
+	        estabelecimento.getId(),
+	        idPedido,
+	        whatsappCliente,
+	        idProduto,
+	        quantidade
+	    );
+
+	    // ===============================
+	    // Mensagem para o cliente
+	    // ===============================
+
+	    String textoCliente =
+	        "✅ Item adicionado ao pedido!\n\n" +
+	        "Pedido #" + idPedido + "\n" +
+	        "Total atualizado: " +
+	        msg.formatarMoeda(atualizado.getTotal() == null
+	            ? BigDecimal.ZERO
+	            : atualizado.getTotal()
+	        ) +
+	        "\n\nDeseja fazer mais alguma alteração?";
+
+	    MensagemWhatsappSaidaDTO saidaCliente = msg.botoes(
+	        whatsappCliente,
+	        msg.trunc(textoCliente, 1024),
+	        List.of(
+	            btn("COMANDO|PEDIDO_REVISAR|" + idPedido, "🔎 Voltar à revisão"),
+	            btn("COMANDO|REVISAO_ADICIONAR_ITENS|" + idPedido, "➕ Adicionar mais"),
+	            btn("COMANDO|MENU", "⬅️ Menu")
+	        )
+	    );
+
+	    // ===============================
+	    // Busca entidade completa para admin
+	    // ===============================
+
+	    Pedido pedidoEntidade = pedidoService.buscarEntidadeComItens(
+	        estabelecimento.getId(),
+	        idPedido
+	    );
+
+	    // ===============================
+	    // Notificação para admins
+	    // ===============================
+
+	    List<MensagemWhatsappSaidaDTO> extras =
+	        administradorWhatsappService.montarNotificacoesMudancaPedidoParaAdmins(
+	            estabelecimento,
+	            idPedido,
+	            whatsappCliente,
+	            "➕ Cliente adicionou itens",
+	            pedidoEntidade.getStatus(),
+	            administradorWhatsappService.montarResumoItensDoPedido(pedidoEntidade),
+	            pedidoEntidade.getTotal()
+	        );
+
+	    return new RoteamentoResultado(
+	        "revisao_item_adicionado",
+	        saidaCliente,
+	        extras
+	    );
+	}
+
+    private RoteamentoResultado tratarRevisaoCancelarPedido(
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    Long idPedido
+	) {
+
+	    pedidoService.cancelarPedidoDoCliente(
+	        estabelecimento.getId(),
+	        idPedido,
+	        whatsappCliente
+	    );
+
+	    MensagemWhatsappSaidaDTO saidaCliente = msg.texto(
+	        whatsappCliente,
+	        msg.trunc(
+	            "✅ Pedido cancelado.\n\n" +
+	                "Pedido #" + idPedido + "\n" +
+	                "Se quiser, envie *MENU* para voltar ao início.",
+	            4096
+	        )
+	    );
+
+	    // Busca entidade completa
+	    Pedido pedidoEntidade = pedidoService.buscarEntidadeComItens(
+	        estabelecimento.getId(),
+	        idPedido
+	    );
+
+	    List<MensagemWhatsappSaidaDTO> extras =
+	        administradorWhatsappService.montarNotificacoesMudancaPedidoParaAdmins(
+	            estabelecimento,
+	            idPedido,
+	            whatsappCliente,
+	            "🗑️ Cliente cancelou o pedido",
+	            pedidoEntidade.getStatus(),
+	            administradorWhatsappService.montarResumoItensDoPedido(pedidoEntidade),
+	            pedidoEntidade.getTotal()
+	        );
+
+	    return new RoteamentoResultado(
+	        "revisao_pedido_cancelado",
+	        saidaCliente,
+	        extras
+	    );
+	}
+    
+    
+    private RoteamentoResultado tratarRevisaoConfirmarEntrega(
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    Long idPedido
+	) {
+
+	    pedidoService.confirmarEntregaDoCliente(
+	        estabelecimento.getId(),
+	        idPedido,
+	        whatsappCliente
+	    );
+
+	    MensagemWhatsappSaidaDTO saidaCliente = msg.texto(
+	        whatsappCliente,
+	        msg.trunc(
+	            "✅ Entrega confirmada! Obrigado. 🙂\n\n" +
+	                "Pedido #" + idPedido + "\n" +
+	                "Se precisar, envie *MENU*.",
+	            4096
+	        )
+	    );
+
+	    // Busca entidade completa
+	    Pedido pedidoEntidade = pedidoService.buscarEntidadeComItens(
+	        estabelecimento.getId(),
+	        idPedido
+	    );
+
+	    List<MensagemWhatsappSaidaDTO> extras =
+	        administradorWhatsappService.montarNotificacoesMudancaPedidoParaAdmins(
+	            estabelecimento,
+	            idPedido,
+	            whatsappCliente,
+	            "✅ Cliente confirmou a entrega",
+	            pedidoEntidade.getStatus(),
+	            administradorWhatsappService.montarResumoItensDoPedido(pedidoEntidade),
+	            pedidoEntidade.getTotal()
+	        );
+
+	    return new RoteamentoResultado(
+	        "revisao_entrega_confirmada",
+	        saidaCliente,
+	        extras
+	    );
+	}
+
+    
+    
     // ======================================================================
     // EXTRAÇÃO DE DADOS
     // ======================================================================

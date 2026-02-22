@@ -364,7 +364,7 @@ public class SessaoAtendimentoWhatsappService {
     }
 
     // =========================================================
-    // ADMIN: MARCA - CRIAR / EDITAR NOME POR DIGITAÇÃO (NOVO)
+    // ADMIN: MARCA - CRIAR / EDITAR NOME POR DIGITAÇÃO
     // =========================================================
 
     public boolean isAguardandoNovaMarca(Long idSessao) {
@@ -434,6 +434,117 @@ public class SessaoAtendimentoWhatsappService {
         salvar(s);
     }
     
+     // =========================================================
+	 // CEP - EDITAR POR DIGITAÇÃO
+	 // =========================================================
+    @Transactional
+    public void marcarAguardandoCepEstabelecimento(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        s.setAguardandoCepEstabelecimento(true);
+        s.setAguardando(null);
+        salvar(s);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isAguardandoCepEstabelecimento(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        return s.isAguardandoCepEstabelecimento();
+    }
+
+    @Transactional
+    public void limparAguardandoCepEstabelecimento(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        s.setAguardandoCepEstabelecimento(false);
+        salvar(s);
+    }
+    
+    
+    // =========================================================
+    // ADMIN: TAXA ENTREGA POR BAIRRO (DIGITAÇÃO)
+    // =========================================================
+
+    public boolean isAguardandoTaxaEntregaBairro(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        return Boolean.TRUE.equals(s.getAguardandoTaxaEntregaBairro())
+            && s.getIdBairroTaxaEntrega() != null;
+    }
+
+    public Long getIdBairroTaxaEntrega(Long idSessao) {
+        return buscarPorId(idSessao).getIdBairroTaxaEntrega();
+    }
+
+    public Integer getOffsetListaTaxaEntregaBairro(Long idSessao) {
+        Integer v = buscarPorId(idSessao).getOffsetListaTaxaEntregaBairro();
+        return v == null ? 0 : Math.max(0, v);
+    }
+
+    @Transactional
+    public void marcarAguardandoTaxaEntregaBairro(Long idSessao, Long idBairro, Integer offsetLista) {
+
+        if (idBairro == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idBairro é obrigatório");
+        }
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setAguardandoTaxaEntregaBairro(true);
+        s.setIdBairroTaxaEntrega(idBairro);
+        s.setOffsetListaTaxaEntregaBairro(offsetLista == null ? 0 : Math.max(0, offsetLista));
+
+        s.setAguardando(null); // evita conflito com fluxo cliente
+
+        salvar(s);
+    }
+
+    @Transactional
+    public void limparAguardandoTaxaEntregaBairro(Long idSessao) {
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setAguardandoTaxaEntregaBairro(false);
+        s.setIdBairroTaxaEntrega(null);
+        s.setOffsetListaTaxaEntregaBairro(null);
+
+        salvar(s);
+    }
+    
+    // =========================================================
+    // ADMIN: TAXA PADRÃO (DIGITAÇÃO)
+    // =========================================================
+
+    public boolean isAguardandoTaxaEntregaPadrao(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        return Boolean.TRUE.equals(s.getAguardandoTaxaEntregaPadrao());
+    }
+
+    public Integer getOffsetListaTaxaPadraoVoltar(Long idSessao) {
+        Integer v = buscarPorId(idSessao).getOffsetListaTaxaPadraoVoltar();
+        return v == null ? 0 : Math.max(0, v);
+    }
+
+    @Transactional
+    public void marcarAguardandoTaxaEntregaPadrao(Long idSessao, Integer offsetVoltar) {
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setAguardandoTaxaEntregaPadrao(true);
+        s.setOffsetListaTaxaPadraoVoltar(offsetVoltar == null ? 0 : Math.max(0, offsetVoltar));
+
+        s.setAguardando(null);
+
+        salvar(s);
+    }
+
+    @Transactional
+    public void limparAguardandoTaxaEntregaPadrao(Long idSessao) {
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setAguardandoTaxaEntregaPadrao(false);
+        s.setOffsetListaTaxaPadraoVoltar(null);
+
+        salvar(s);
+    }
     
     // =========================================================
     // CONFIRMAÇÃO FINAL
@@ -472,24 +583,21 @@ public class SessaoAtendimentoWhatsappService {
 
     @Transactional
     public void limparPedidoEmAndamento(Long idSessao) {
+
         SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
 
-        // fluxo cliente
         s.setAguardando(null);
         s.setEnderecoEntrega(null);
         s.setObservacoesEntrega(null);
 
-        // pagamento/troco
         s.setFormaPagamento(null);
         s.setPrecisaTroco(null);
         s.setTrocoPara(null);
 
-        // admin: preço
         s.setAguardandoNovoPreco(false);
         s.setIdProdutoNovoPreco(null);
         s.setOffsetListaNovoPreco(null);
 
-        // admin: produto nome/descrição
         s.setAguardandoNovoNomeProduto(false);
         s.setIdProdutoNovoNome(null);
         s.setOffsetListaNovoNome(null);
@@ -498,7 +606,6 @@ public class SessaoAtendimentoWhatsappService {
         s.setIdProdutoNovaDescricao(null);
         s.setOffsetListaNovaDescricao(null);
 
-        // admin: marcas
         s.setAguardandoNovaMarca(false);
         s.setOffsetListaMarcasNova(null);
 
@@ -506,8 +613,19 @@ public class SessaoAtendimentoWhatsappService {
         s.setIdMarcaEditarNome(null);
         s.setOffsetListaMarcasEditarNome(null);
 
+        s.setAguardandoCepEstabelecimento(false);
+
+        //taxas
+        s.setAguardandoTaxaEntregaBairro(false);
+        s.setIdBairroTaxaEntrega(null);
+        s.setOffsetListaTaxaEntregaBairro(null);
+
+        s.setAguardandoTaxaEntregaPadrao(false);
+        s.setOffsetListaTaxaPadraoVoltar(null);
+
         salvar(s);
     }
+
 
     // =========================================================
     // INTERNOS
@@ -515,12 +633,13 @@ public class SessaoAtendimentoWhatsappService {
 
     private void garantirDefaults(SessaoAtendimentoWhatsapp s) {
         if (s.getAguardandoNovoPreco() == null) s.setAguardandoNovoPreco(false);
-
         if (s.getAguardandoNovaMarca() == null) s.setAguardandoNovaMarca(false);
         if (s.getAguardandoEditarMarcaNome() == null) s.setAguardandoEditarMarcaNome(false);
-
         if (s.getAguardandoNovoNomeProduto() == null) s.setAguardandoNovoNomeProduto(false);
         if (s.getAguardandoNovaDescricaoProduto() == null) s.setAguardandoNovaDescricaoProduto(false);
+
+        if (s.getAguardandoTaxaEntregaBairro() == null) s.setAguardandoTaxaEntregaBairro(false);
+        if (s.getAguardandoTaxaEntregaPadrao() == null) s.setAguardandoTaxaEntregaPadrao(false);
     }
 
     @Transactional

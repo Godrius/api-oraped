@@ -1,0 +1,39 @@
+// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorRoteamentoService.java
+package br.com.oraped.service.whatsapp.orquestrador;
+
+import org.springframework.stereotype.Service;
+
+import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.whatsapp.OrquestradorContexto;
+import br.com.oraped.domain.whatsapp.RoteamentoResultado;
+import br.com.oraped.service.whatsapp.ComandoWhatsapp;
+import lombok.RequiredArgsConstructor;
+
+@Service
+@RequiredArgsConstructor
+public class OrquestradorRoteamentoService {
+
+    private final OrquestradorRoteamentoAdminService rotearAdmin;
+    private final OrquestradorRoteamentoClienteService rotearCliente;
+
+    public RoteamentoResultado rotearComando(
+        OrquestradorContexto ctx,
+        ComandoWhatsapp cmd
+    ) {
+
+        Estabelecimento estabelecimento = ctx.getEstabelecimento();
+
+        String whatsappCliente = ctx.getWhatsappCliente();
+        String whatsappReceptor = ctx.getWhatsappReceptor();
+        String phoneNumberId = ctx.getPhoneNumberId();
+        Long idSessao = ctx.getSessao() == null ? null : ctx.getSessao().getId();
+
+        String acao = cmd == null ? null : cmd.getAcao();
+
+        if (acao != null && acao.startsWith("ADMIN_")) {
+            return rotearAdmin.rotearAdmin(estabelecimento, whatsappCliente, idSessao, cmd);
+        }
+
+        return rotearCliente.rotearCliente(estabelecimento, whatsappCliente, whatsappReceptor, phoneNumberId, idSessao, cmd);
+    }
+}

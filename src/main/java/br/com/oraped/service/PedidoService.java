@@ -11,6 +11,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import br.com.oraped.domain.Cliente;
 import br.com.oraped.domain.Estabelecimento;
@@ -36,6 +38,8 @@ public class PedidoService {
     private final ProdutoService produtoService;
     private final ClienteService clienteService;
 
+    
+    
     @Transactional
     public PedidoResponseDTO criar(PedidoRequestDTO req) {
 
@@ -165,11 +169,13 @@ public class PedidoService {
     }
 
     
+    
     @Transactional
     public Pedido preparar(Long idEstabelecimento, Long idPedido) {
         // Mesma regra do "aceitar": CRIADO -> EM_PREPARO
         return aceitar(idEstabelecimento, idPedido);
     }
+    
     
     @Transactional
     public Pedido cancelar(Long idEstabelecimento, Long idPedido) {
@@ -205,6 +211,7 @@ public class PedidoService {
         return pedidoRepository.save(pedido);
     }
     
+    
     @Transactional(readOnly = true)
     public PedidoResponseDTO buscar(Long idEstabelecimento, Long idPedido) {
 
@@ -236,6 +243,239 @@ public class PedidoService {
     }
 
     
+    // ======================================================================
+    // REVISÃO DO PEDIDO (cliente via WhatsApp)
+    // ======================================================================
+
+    @Transactional(readOnly = true)
+    public PedidoResponseDTO buscarUltimoPedidoDoCliente(Long idEstabelecimento, String whatsappCliente) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+        if (whatsappCliente == null || whatsappCliente.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsappCliente é obrigatório");
+        }
+
+        Estabelecimento estabelecimento = estabelecimentoService.buscar(idEstabelecimento);
+
+        Pageable pageable = PageRequest.of(0, 1);
+
+        List<Pedido> ultimos = pedidoRepository.buscarUltimosComEndereco(
+            estabelecimento,
+            whatsappCliente.trim(),
+            pageable
+        );
+
+        if (ultimos == null || ultimos.isEmpty()) {
+            return null;
+        }
+
+        Pedido p = ultimos.get(0);
+
+        // carrega itens + produto (para resumo)
+        Pedido pedidoCompleto = buscarEntidadeComItens(idEstabelecimento, p.getId());
+
+        PedidoResponseDTO dto = new PedidoResponseDTO(pedidoCompleto);
+        preencherCamposDeRevisao(dto, pedidoCompleto);
+
+        return dto;
+    }
+
+    @Transactional(readOnly = true)
+    public PedidoResponseDTO buscarResumoPedidoParaCliente(Long idEstabelecimento, Long idPedido, String whatsappCliente) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+        if (idPedido == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idPedido é obrigatório");
+        }
+        if (whatsappCliente == null || whatsappCliente.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsappCliente é obrigatório");
+        }
+
+        // garante que existe
+        estabelecimentoService.validarExiste(idEstabelecimento);
+
+        Pedido pedido = buscarEntidadeComItens(idEstabelecimento, idPedido);
+
+        validarPedidoPertenceAoCliente(pedido, whatsappCliente);
+
+        PedidoResponseDTO dto = new PedidoResponseDTO(pedido);
+        preencherCamposDeRevisao(dto, pedido);
+
+        return dto;
+    }
+
+    @Transactional
+    public PedidoResponseDTO adicionarItemNoPedidoDoCliente(
+        Long idEstabelecimento,
+        Long idPedido,
+        String whatsappCliente,
+        Long idProduto,
+        Integer quantidade
+    ) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+        if (idPedido == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idPedido é obrigatório");
+        }
+        if (whatsappCliente == null || whatsappCliente.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsappCliente é obrigatório");
+        }
+        if (idProduto == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idProduto é obrigatório");
+        }
+        if (quantidade == null || quantidade < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "quantidade inválida");
+        }
+
+        // carrega pedido com itens
+        Pedido pedido = buscarEntidadeComItens(idEstabelecimento, idPedido);
+
+        validarPedidoPertenceAoCliente(pedido, whatsappCliente);
+
+        // regra: se ainda não confirmado => CRIADO pode adicionar
+        if (pedido.getStatus() != StatusPedido.CRIADO) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Pedido não pode adicionar itens neste status: " + pedido.getStatus()
+            );
+        }
+
+        Produto produto = produtoService.buscar(idProduto);
+
+        if (produto.getEstabelecimento() == null || produto.getEstabelecimento().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Produto sem estabelecimento associado");
+        }
+
+        if (!Objects.equals(produto.getEstabelecimento().getId(), idEstabelecimento)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Produto não pertence ao estabelecimento informado");
+        }
+
+        if (!produto.isDisponivelParaVenda()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Produto indisponível para venda");
+        }
+
+        ItemPedido item = new ItemPedido();
+        item.setPedido(pedido);
+        item.setProduto(produto);
+        item.setQuantidade(quantidade);
+        item.setObservacoes(null);
+
+        BigDecimal precoProduto = nvl(produto.getPreco());
+        item.setPrecoUnitarioProduto(precoProduto);
+
+        // revisão via WhatsApp: sem opcionais
+        BigDecimal subtotalItem = precoProduto.multiply(BigDecimal.valueOf(quantidade));
+        item.setSubtotalItem(subtotalItem);
+
+        pedido.getItens().add(item);
+
+        // recalcula subtotal/total
+        recalcularTotaisPedido(pedido);
+
+        Pedido salvo = pedidoRepository.save(pedido);
+
+        // mantém a regra de carregar opcionais (não impacta, mas padroniza)
+        pedidoRepository.buscarItensComOpcionais(salvo.getId());
+
+        PedidoResponseDTO dto = new PedidoResponseDTO(salvo);
+        preencherCamposDeRevisao(dto, salvo);
+
+        return dto;
+    }
+
+    @Transactional
+    public PedidoResponseDTO cancelarPedidoDoCliente(Long idEstabelecimento, Long idPedido, String whatsappCliente) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+        if (idPedido == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idPedido é obrigatório");
+        }
+        if (whatsappCliente == null || whatsappCliente.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsappCliente é obrigatório");
+        }
+
+        Pedido pedido = pedidoRepository.findById(idPedido)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado"));
+
+        if (pedido.getEstabelecimento() == null || pedido.getEstabelecimento().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Pedido sem estabelecimento associado");
+        }
+
+        if (!Objects.equals(pedido.getEstabelecimento().getId(), idEstabelecimento)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado para o estabelecimento informado");
+        }
+
+        validarPedidoPertenceAoCliente(pedido, whatsappCliente);
+
+        StatusPedido st = pedido.getStatus();
+
+        // regra revisão: se CRIADO => pode cancelar; se EM_PREPARO => pode cancelar
+        if (st != StatusPedido.CRIADO && st != StatusPedido.EM_PREPARO) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Pedido não pode ser cancelado neste status: " + st
+            );
+        }
+
+        pedido.setStatus(StatusPedido.CANCELADO);
+        Pedido salvo = pedidoRepository.save(pedido);
+
+        PedidoResponseDTO dto = new PedidoResponseDTO(salvo);
+        preencherCamposDeRevisao(dto, salvo);
+
+        return dto;
+    }
+
+    @Transactional
+    public PedidoResponseDTO confirmarEntregaDoCliente(Long idEstabelecimento, Long idPedido, String whatsappCliente) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+        if (idPedido == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idPedido é obrigatório");
+        }
+        if (whatsappCliente == null || whatsappCliente.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsappCliente é obrigatório");
+        }
+
+        Pedido pedido = pedidoRepository.findById(idPedido)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado"));
+
+        if (pedido.getEstabelecimento() == null || pedido.getEstabelecimento().getId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Pedido sem estabelecimento associado");
+        }
+
+        if (!Objects.equals(pedido.getEstabelecimento().getId(), idEstabelecimento)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado para o estabelecimento informado");
+        }
+
+        validarPedidoPertenceAoCliente(pedido, whatsappCliente);
+
+        // regra revisão: PRONTO = "saiu para entrega" => pode confirmar entrega
+        if (pedido.getStatus() != StatusPedido.PRONTO) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Pedido não pode confirmar entrega neste status: " + pedido.getStatus()
+            );
+        }
+
+        pedido.setStatus(StatusPedido.ENTREGUE);
+        Pedido salvo = pedidoRepository.save(pedido);
+
+        PedidoResponseDTO dto = new PedidoResponseDTO(salvo);
+        preencherCamposDeRevisao(dto, salvo);
+
+        return dto;
+    }
     
     // Usado no detalhe admin (retorna entidade com itens carregados)
     @Transactional(readOnly = true)
@@ -410,6 +650,99 @@ public class PedidoService {
         }
     }
 
+    
+    
+    
+    private void validarPedidoPertenceAoCliente(Pedido pedido, String whatsappCliente) {
+
+        String tel = whatsappCliente == null ? "" : whatsappCliente.trim();
+
+        if (!tel.equals(nvlStr(pedido.getClienteTelefone()))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pedido não encontrado para o cliente informado");
+        }
+    }
+
+    private void preencherCamposDeRevisao(PedidoResponseDTO dto, Pedido pedido) {
+        if (dto == null || pedido == null) return;
+
+        dto.setStatusLabel(formatarStatusLabel(pedido.getStatus()));
+        dto.setResumoItens(montarResumoItensPedido(pedido));
+    }
+
+    private String formatarStatusLabel(StatusPedido st) {
+        if (st == null) return "Desconhecido";
+
+        switch (st) {
+            case CRIADO:
+                return "aguardando confirmação do estabelecimento";
+            case EM_PREPARO:
+                return "em preparo";
+            case PRONTO:
+                return "saiu para entrega";
+            case ENTREGUE:
+                return "entregue";
+            case CANCELADO:
+                return "cancelado";
+            default:
+                return st.name();
+        }
+    }
+
+    private String montarResumoItensPedido(Pedido pedido) {
+
+        if (pedido == null || pedido.getItens() == null || pedido.getItens().isEmpty()) {
+            return "(sem itens)";
+        }
+
+        StringBuilder sb = new StringBuilder();
+
+        for (ItemPedido it : pedido.getItens()) {
+            if (it == null) continue;
+
+            String nome = "(produto)";
+            if (it.getProduto() != null && it.getProduto().getNome() != null) {
+                nome = it.getProduto().getNome();
+            }
+
+            int qtd = it.getQuantidade() == null ? 0 : it.getQuantidade();
+
+            sb.append("- ")
+                .append(nome)
+                .append(" x")
+                .append(qtd)
+                .append("\n");
+        }
+
+        return sb.toString().trim();
+    }
+
+    private void recalcularTotaisPedido(Pedido pedido) {
+
+        if (pedido == null) return;
+
+        BigDecimal subtotal = BigDecimal.ZERO;
+
+        if (pedido.getItens() != null) {
+            for (ItemPedido it : pedido.getItens()) {
+                if (it == null) continue;
+                subtotal = subtotal.add(nvl(it.getSubtotalItem()));
+            }
+        }
+
+        pedido.setSubtotal(subtotal);
+
+        BigDecimal taxaServico = nvl(pedido.getTaxaServico());
+        BigDecimal taxaEntrega = nvl(pedido.getTaxaEntrega());
+
+        pedido.setTaxaServico(taxaServico);
+        pedido.setTaxaEntrega(taxaEntrega);
+
+        pedido.setTotal(subtotal.add(taxaServico).add(taxaEntrega));
+    }
+
+    private String nvlStr(String v) {
+        return v == null ? "" : v;
+    }
     
     
     private BigDecimal nvl(BigDecimal v) {

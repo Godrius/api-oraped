@@ -1,12 +1,16 @@
 // src/main/java/br/com/oraped/service/EstabelecimentoService.java
 package br.com.oraped.service;
 
+import java.math.BigDecimal;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.geolocalizacao.Bairro;
 import br.com.oraped.dto.estabelecimento.EstabelecimentoCreateRequestDTO;
 import br.com.oraped.repository.EstabelecimentoRepository;
 import br.com.oraped.repository.ProdutoRepository;
@@ -129,6 +133,48 @@ public class EstabelecimentoService {
         return estabelecimentoRepository.save(e);
     }
 
+    
+    @Transactional
+    public Estabelecimento atualizarCepEBairroBase(Long idEstabelecimento, String cep8, Bairro bairroBase) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+
+        String cepLimpo = (cep8 == null) ? "" : cep8.replaceAll("\\D", "").trim();
+        if (!StringUtils.hasText(cepLimpo) || cepLimpo.length() != 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CEP inválido");
+        }
+
+        Estabelecimento e = buscar(idEstabelecimento);
+
+        e.setCep(cepLimpo);
+        e.setBairro(bairroBase);
+
+        return estabelecimentoRepository.save(e);
+    }
+    
+    
+    // =========================
+    // Taxa padrão de entrega
+    // =========================
+    @Transactional
+    public Estabelecimento atualizarTaxaEntregaPadrao(Long idEstabelecimento, BigDecimal taxaEntregaPadrao) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+
+        if (taxaEntregaPadrao != null && taxaEntregaPadrao.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "taxaEntregaPadrao inválida");
+        }
+
+        Estabelecimento e = buscar(idEstabelecimento);
+        e.setTaxaEntregaPadrao(taxaEntregaPadrao);
+
+        return estabelecimentoRepository.save(e);
+    }
+    
     private String normalizarWhatsapp(String whatsapp) {
         String digits = whatsapp.replaceAll("\\D+", "");
         return digits.trim();
