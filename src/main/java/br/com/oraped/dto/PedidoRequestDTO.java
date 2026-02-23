@@ -36,21 +36,39 @@ public class PedidoRequestDTO {
     @Size(max = 2000)
     private String observacoes;
 
+    // =========================================================
+    // NOVO: Endereço estruturado
+    // =========================================================
+
+    @Size(max = 8)
+    private String cepEntrega;
+
+    @Size(max = 120)
+    private String bairroEntrega;
+
+    @Size(max = 120)
+    private String cidadeEntrega;
+
+    @Size(max = 2)
+    private String ufEntrega;
+
+    private Double latitudeEntrega;
+
+    private Double longitudeEntrega;
+
     private BigDecimal taxaServico;
 
     private BigDecimal taxaEntrega;
 
     // =========================================================
-    // NOVO: Pagamento (WhatsApp e demais canais podem preencher)
+    // Pagamento
     // =========================================================
 
     @NotNull
     private FormaPagamentoPedido formaPagamento;
 
-    // Relevante apenas quando formaPagamento == DINHEIRO
     private Boolean precisaTroco;
 
-    // Relevante apenas quando precisaTroco == true
     private BigDecimal trocoPara;
 
     @Valid

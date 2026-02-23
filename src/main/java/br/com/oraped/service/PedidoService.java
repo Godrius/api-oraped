@@ -47,7 +47,6 @@ public class PedidoService {
 
         Estabelecimento estabelecimento = estabelecimentoService.buscar(req.getIdEstabelecimento());
 
-        // Regra WhatsApp: estabelecimento precisa estar ativo e aberto para aceitar pedido
         if (!estabelecimento.isAtivo()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Estabelecimento inativo");
         }
@@ -55,7 +54,6 @@ public class PedidoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Estabelecimento está fechado no momento");
         }
 
-        // Cliente (obter ou criar por estabelecimento+telefone)
         Cliente cliente = clienteService.obterOuCriar(
             estabelecimento,
             req.getCliente().getTelefone(),
@@ -75,7 +73,6 @@ public class PedidoService {
         var produtoPorId = produtos.stream()
             .collect(Collectors.toMap(Produto::getId, p -> p));
 
-        // valida produtos
         for (Produto p : produtos) {
 
             if (!Objects.equals(p.getEstabelecimento().getId(), estabelecimento.getId())) {
@@ -96,10 +93,8 @@ public class PedidoService {
         Pedido pedido = new Pedido();
         pedido.setEstabelecimento(estabelecimento);
 
-        // relacionamento
         pedido.setCliente(cliente);
 
-        // snapshots (opcional)
         pedido.setClienteTelefone(cliente.getTelefone());
         pedido.setClienteNome(cliente.getNome());
 
@@ -107,8 +102,17 @@ public class PedidoService {
         pedido.setTipoAtendimento(req.getTipoAtendimento());
 
         pedido.setNumeroMesa(req.getNumeroMesa());
+
         pedido.setEnderecoEntrega(req.getEnderecoEntrega());
         pedido.setObservacoes(req.getObservacoes());
+
+        // NOVO: endereço estruturado
+        pedido.setCepEntrega(req.getCepEntrega());
+        pedido.setBairroEntrega(req.getBairroEntrega());
+        pedido.setCidadeEntrega(req.getCidadeEntrega());
+        pedido.setUfEntrega(req.getUfEntrega());
+        pedido.setLatitudeEntrega(req.getLatitudeEntrega());
+        pedido.setLongitudeEntrega(req.getLongitudeEntrega());
 
         BigDecimal subtotal = BigDecimal.ZERO;
 
@@ -649,7 +653,6 @@ public class PedidoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "itens não pode ser vazio");
         }
     }
-
     
     
     

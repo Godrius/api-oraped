@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/domain/Pedido.java
 package br.com.oraped.domain;
 
 import java.math.BigDecimal;
@@ -17,50 +16,71 @@ import lombok.Setter;
 @Table(name = "pedido")
 public class Pedido extends BaseEntity {
 
-  @ManyToOne(optional = false)
-  @JoinColumn(name = "estabelecimento_id", nullable = false)
-  private Estabelecimento estabelecimento;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "estabelecimento_id", nullable = false)
+    private Estabelecimento estabelecimento;
 
-  @ManyToOne(optional = false)
-  @JoinColumn(name = "cliente_id", nullable = false)
-  private Cliente cliente;
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "cliente_id", nullable = false)
+    private Cliente cliente;
 
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 30)
-  private StatusPedido status;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private StatusPedido status;
 
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 30)
-  private TipoAtendimento tipoAtendimento;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private TipoAtendimento tipoAtendimento;
 
-  // Snapshot (opcional, mas útil)
-  @Column(length = 30)
-  private String clienteTelefone;
+    @Column(length = 30)
+    private String clienteTelefone;
 
-  @Column(length = 120)
-  private String clienteNome;
+    @Column(length = 120)
+    private String clienteNome;
 
-  @Column(length = 20)
-  private String numeroMesa;
+    @Column(length = 20)
+    private String numeroMesa;
 
-  @Column(columnDefinition = "TEXT")
-  private String enderecoEntrega;
+    @Column(columnDefinition = "TEXT")
+    private String enderecoEntrega;
 
-  @Column(columnDefinition = "TEXT")
-  private String observacoes;
+    @Column(columnDefinition = "TEXT")
+    private String observacoes;
 
-  @Column(nullable = false, precision = 12, scale = 2)
-  private BigDecimal subtotal = BigDecimal.ZERO;
+    // =========================================================
+    // NOVO: Endereço estruturado
+    // =========================================================
 
-  @Column(nullable = false, precision = 12, scale = 2)
-  private BigDecimal taxaServico = BigDecimal.ZERO;
+    @Column(name = "cep_entrega", length = 8)
+    private String cepEntrega;
 
-  @Column(nullable = false, precision = 12, scale = 2)
-  private BigDecimal taxaEntrega = BigDecimal.ZERO;
+    @Column(name = "bairro_entrega", length = 120)
+    private String bairroEntrega;
 
-  @Column(nullable = false, precision = 12, scale = 2)
-  private BigDecimal total = BigDecimal.ZERO;
+    @Column(name = "cidade_entrega", length = 120)
+    private String cidadeEntrega;
 
-  @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
-  private List<ItemPedido> itens = new ArrayList<>();
+    @Column(name = "uf_entrega", length = 2)
+    private String ufEntrega;
+
+    @Column(name = "latitude_entrega")
+    private Double latitudeEntrega;
+
+    @Column(name = "longitude_entrega")
+    private Double longitudeEntrega;
+
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal subtotal = BigDecimal.ZERO;
+
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal taxaServico = BigDecimal.ZERO;
+
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal taxaEntrega = BigDecimal.ZERO;
+
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal total = BigDecimal.ZERO;
+
+    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<ItemPedido> itens = new ArrayList<>();
 }

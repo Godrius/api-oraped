@@ -22,18 +22,18 @@ public class PedidoResponseDTO {
     private BigDecimal taxaEntrega;
     private BigDecimal total;
 
+    // NOVO: Endereço estruturado (opcional para retorno)
+    private String cepEntrega;
+    private String bairroEntrega;
+    private String cidadeEntrega;
+    private String ufEntrega;
+    private Double latitudeEntrega;
+    private Double longitudeEntrega;
+
     // usados na revisão do pedido (WhatsApp)
     private String statusLabel;
     private String resumoItens;
 
-    /**
-     * Construtor de conveniência para mapear entidade -> DTO.
-     *
-     * Regras:
-     * - DTO não executa lógica de negócio
-     * - Apenas extrai dados da entidade
-     * - Null-safe
-     */
     public PedidoResponseDTO(Pedido pedido) {
 
         if (pedido == null) {
@@ -49,6 +49,11 @@ public class PedidoResponseDTO {
         this.taxaEntrega = pedido.getTaxaEntrega();
         this.total = pedido.getTotal();
 
-        // statusLabel/resumoItens serão preenchidos no service (sem regra no DTO)
+        this.cepEntrega = pedido.getCepEntrega();
+        this.bairroEntrega = pedido.getBairroEntrega();
+        this.cidadeEntrega = pedido.getCidadeEntrega();
+        this.ufEntrega = pedido.getUfEntrega();
+        this.latitudeEntrega = pedido.getLatitudeEntrega();
+        this.longitudeEntrega = pedido.getLongitudeEntrega();
     }
 }

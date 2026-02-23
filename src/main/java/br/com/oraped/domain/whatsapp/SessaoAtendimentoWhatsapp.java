@@ -24,21 +24,21 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(
-  name = "sessao_atendimento_whatsapp",
-  uniqueConstraints = {
-    @UniqueConstraint(
-      name = "uk_sessao_whatsapp_cliente_receptor",
-      columnNames = {"whatsapp_cliente", "whatsapp_receptor"}
-    )
-  },
-  indexes = {
-    @Index(name = "idx_sessao_whatsapp_cliente", columnList = "whatsapp_cliente"),
-    @Index(name = "idx_sessao_whatsapp_receptor", columnList = "whatsapp_receptor")
-  }
+    name = "sessao_atendimento_whatsapp",
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_sessao_whatsapp_cliente_receptor",
+            columnNames = {"whatsapp_cliente", "whatsapp_receptor"}
+        )
+    },
+    indexes = {
+        @Index(name = "idx_sessao_whatsapp_cliente", columnList = "whatsapp_cliente"),
+        @Index(name = "idx_sessao_whatsapp_receptor", columnList = "whatsapp_receptor")
+    }
 )
 public class SessaoAtendimentoWhatsapp {
 
-	// =========================================================
+    // =========================================================
     // IDENTIFICAÇÃO
     // =========================================================
 
@@ -70,6 +70,34 @@ public class SessaoAtendimentoWhatsapp {
 
     @Column(name = "observacoes_entrega", length = 2000)
     private String observacoesEntrega;
+
+    // =========================================================
+    // NOVO: Endereço estruturado (cliente)
+    // =========================================================
+
+    @Column(name = "cep_entrega", length = 8)
+    private String cepEntrega;
+
+    @Column(name = "bairro_entrega", length = 120)
+    private String bairroEntrega;
+
+    @Column(name = "cidade_entrega", length = 120)
+    private String cidadeEntrega;
+
+    @Column(name = "uf_entrega", length = 2)
+    private String ufEntrega;
+
+    @Column(name = "latitude_entrega")
+    private Double latitudeEntrega;
+
+    @Column(name = "longitude_entrega")
+    private Double longitudeEntrega;
+
+    @Column(name = "taxa_entrega_calculada", precision = 10, scale = 2)
+    private BigDecimal taxaEntregaCalculada;
+
+    @Column(name = "endereco_base_resolvido", length = 600)
+    private String enderecoBaseResolvido;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "forma_pagamento", length = 20)
@@ -148,8 +176,7 @@ public class SessaoAtendimentoWhatsapp {
     // =========================================================
     @Column(nullable = false)
     private boolean aguardandoCepEstabelecimento = false;
-  
-    
+
     // =========================================================
     // ADMIN — Taxa por bairro (digitação)
     // =========================================================
@@ -163,17 +190,15 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_taxa_entrega_bairro")
     private Integer offsetListaTaxaEntregaBairro;
 
-
     // =========================================================
     // ADMIN — Taxa padrão (digitação)
     // =========================================================
     @Column(name = "aguardando_taxa_entrega_padrao", nullable = false)
     private Boolean aguardandoTaxaEntregaPadrao;
-    
+
     @Column(name = "offset_lista_taxa_padrao_voltar")
     private Integer offsetListaTaxaPadraoVoltar;
-        
-    
+
     @PrePersist
     public void prePersist() {
 
@@ -200,18 +225,18 @@ public class SessaoAtendimentoWhatsapp {
         if (aguardandoEditarMarcaNome == null) {
             aguardandoEditarMarcaNome = false;
         }
-        
+
         if (aguardandoTaxaEntregaBairro == null) {
             aguardandoTaxaEntregaBairro = false;
         }
-        
+
         if (aguardandoTaxaEntregaPadrao == null) {
-        	aguardandoTaxaEntregaPadrao = false;
+            aguardandoTaxaEntregaPadrao = false;
         }
     }
 
     @PreUpdate
     public void preUpdate() {
-    	ultimaInteracaoEm = OffsetDateTime.now();
+        ultimaInteracaoEm = OffsetDateTime.now();
     }
 }

@@ -30,6 +30,9 @@ public class SessaoAtendimentoWhatsappService {
     private static final String AGUARDANDO_TROCO_CONFIRMACAO = "TROCO_CONFIRMACAO";
     private static final String AGUARDANDO_TROCO_VALOR = "TROCO_VALOR";
     private static final String AGUARDANDO_CONFIRMACAO_FINAL = "CONFIRMACAO_FINAL";
+    private static final String AGUARDANDO_CEP_ENTREGA = "CEP_ENTREGA";
+    private static final String AGUARDANDO_COMPLEMENTO_ENDERECO = "COMPLEMENTO_ENDERECO";
+    private static final String AGUARDANDO_ENDERECO_COMPLETO_FALLBACK = "ENDERECO_COMPLETO_FALLBACK";
     
     // =========================================================
     // BÁSICO (sessão)
@@ -511,7 +514,6 @@ public class SessaoAtendimentoWhatsappService {
     // =========================================================
     // ADMIN: TAXA PADRÃO (DIGITAÇÃO)
     // =========================================================
-
     public boolean isAguardandoTaxaEntregaPadrao(Long idSessao) {
         SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
         return Boolean.TRUE.equals(s.getAguardandoTaxaEntregaPadrao());
@@ -542,6 +544,98 @@ public class SessaoAtendimentoWhatsappService {
 
         s.setAguardandoTaxaEntregaPadrao(false);
         s.setOffsetListaTaxaPadraoVoltar(null);
+
+        salvar(s);
+    }
+    
+    
+    // =========================================================
+    // CLIENTE: TAXA DE ENTREGA DE ACORDO COM ENDEREÇO
+    // =========================================================
+    @Transactional
+    public void marcarAguardandoCepEntrega(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        s.setAguardando(AGUARDANDO_CEP_ENTREGA);
+        salvar(s);
+    }
+
+    public boolean isAguardandoCepEntrega(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        return Objects.equals(AGUARDANDO_CEP_ENTREGA, s.getAguardando());
+    }
+
+    @Transactional
+    public void marcarAguardandoComplementoEndereco(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        s.setAguardando(AGUARDANDO_COMPLEMENTO_ENDERECO);
+        salvar(s);
+    }
+
+    public boolean isAguardandoComplementoEndereco(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        return Objects.equals(AGUARDANDO_COMPLEMENTO_ENDERECO, s.getAguardando());
+    }
+
+    @Transactional
+    public void marcarAguardandoEnderecoCompletoFallback(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        s.setAguardando(AGUARDANDO_ENDERECO_COMPLETO_FALLBACK);
+        salvar(s);
+    }
+
+    public boolean isAguardandoEnderecoCompletoFallback(Long idSessao) {
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+        return Objects.equals(AGUARDANDO_ENDERECO_COMPLETO_FALLBACK, s.getAguardando());
+    }
+
+    @Transactional
+    public void salvarEnderecoResolvidoPorCep(
+        Long idSessao,
+        String cep8,
+        String enderecoBaseResolvido,
+        String bairro,
+        String cidade,
+        String uf,
+        Double latitude,
+        Double longitude,
+        BigDecimal taxaEntregaCalculada
+    ) {
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setCepEntrega(StringUtils.hasText(cep8) ? cep8.trim() : null);
+        s.setEnderecoBaseResolvido(StringUtils.hasText(enderecoBaseResolvido) ? enderecoBaseResolvido.trim() : null);
+
+        s.setBairroEntrega(StringUtils.hasText(bairro) ? bairro.trim() : null);
+        s.setCidadeEntrega(StringUtils.hasText(cidade) ? cidade.trim() : null);
+        s.setUfEntrega(StringUtils.hasText(uf) ? uf.trim() : null);
+
+        s.setLatitudeEntrega(latitude);
+        s.setLongitudeEntrega(longitude);
+
+        s.setTaxaEntregaCalculada(taxaEntregaCalculada);
+
+        // ainda não finaliza enderecoEntrega aqui; vai finalizar com complemento
+        s.setEnderecoEntrega(null);
+        s.setObservacoesEntrega(null);
+
+        salvar(s);
+    }
+
+    @Transactional
+    public void salvarComplementoFinalizarEndereco(
+        Long idSessao,
+        String enderecoFinal,
+        String observacoes
+    ) {
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setEnderecoEntrega(StringUtils.hasText(enderecoFinal) ? enderecoFinal.trim() : null);
+        s.setObservacoesEntrega(StringUtils.hasText(observacoes) ? observacoes.trim() : null);
+
+        // encerra aguardando do cliente
+        s.setAguardando(null);
 
         salvar(s);
     }
@@ -623,6 +717,16 @@ public class SessaoAtendimentoWhatsappService {
         s.setAguardandoTaxaEntregaPadrao(false);
         s.setOffsetListaTaxaPadraoVoltar(null);
 
+        //endereço do cliente
+        s.setCepEntrega(null);
+        s.setBairroEntrega(null);
+        s.setCidadeEntrega(null);
+        s.setUfEntrega(null);
+        s.setLatitudeEntrega(null);
+        s.setLongitudeEntrega(null);
+        s.setTaxaEntregaCalculada(null);
+        s.setEnderecoBaseResolvido(null);
+        
         salvar(s);
     }
 

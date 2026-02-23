@@ -346,70 +346,84 @@ public class OrquestradorMenusClienteService {
     }
 
     public MensagemWhatsappSaidaDTO montarConfirmacaoFinalAntesDeEnviar(
-        Estabelecimento estabelecimento,
-        String whatsappCliente,
-        SessaoAtendimentoWhatsapp s
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    SessaoAtendimentoWhatsapp s
+	) {
 
-        String pagamento = formatarPagamentoParaTexto(s);
+	    String pagamento = formatarPagamentoParaTexto(s);
 
-        Map<Long, Integer> carrinho = carrinhoService.montarCarrinhoAtual(s.getId());
+	    Map<Long, Integer> carrinho = carrinhoService.montarCarrinhoAtual(s.getId());
 
-        String itensTexto = "(sem itens)";
-        BigDecimal total = BigDecimal.ZERO;
+	    String itensTexto = "(sem itens)";
+	    BigDecimal subtotalItens = BigDecimal.ZERO;
 
-        if (carrinho != null && !carrinho.isEmpty()) {
+	    if (carrinho != null && !carrinho.isEmpty()) {
 
-            StringBuilder sb = new StringBuilder();
+	        StringBuilder sb = new StringBuilder();
 
-            for (var e : carrinho.entrySet()) {
+	        for (var e : carrinho.entrySet()) {
 
-                Long idProduto = e.getKey();
-                int qtd = e.getValue() == null ? 0 : e.getValue();
+	            Long idProduto = e.getKey();
+	            int qtd = e.getValue() == null ? 0 : e.getValue();
 
-                Produto p = extracaoService.extrairProduto(estabelecimento, idProduto);
+	            Produto p = extracaoService.extrairProduto(estabelecimento, idProduto);
 
-                String nome = (p == null ? ("Produto #" + idProduto) : msg.safe(p.getNome()));
+	            String nome = (p == null ? ("Produto #" + idProduto) : msg.safe(p.getNome()));
 
-                BigDecimal subtotal = (p == null ? BigDecimal.ZERO : calcularPrecoPorQuantidade(p, qtd));
-                total = total.add(subtotal);
+	            BigDecimal subtotalItem = (p == null ? BigDecimal.ZERO : calcularPrecoPorQuantidade(p, qtd));
+	            subtotalItens = subtotalItens.add(subtotalItem);
 
-                sb.append("- ")
-                    .append(nome)
-                    .append(" x").append(qtd)
-                    .append(" = ").append(msg.formatarMoeda(subtotal))
-                    .append("\n");
-            }
+	            sb.append("- ")
+	                .append(nome)
+	                .append(" x").append(qtd)
+	                .append(" = ").append(msg.formatarMoeda(subtotalItem))
+	                .append("\n");
+	        }
 
-            itensTexto = sb.toString().trim();
-        }
+	        itensTexto = sb.toString().trim();
+	    }
 
-        String endereco = msg.trunc(msg.safe(s.getEnderecoEntrega()), 650);
+	    BigDecimal taxaEntrega = s.getTaxaEntregaCalculada();
 
-        String obs = msg.safe(s.getObservacoesEntrega());
-        String obsFmt = StringUtils.hasText(obs)
-            ? ("\n*Obs:* " + msg.trunc(obs, 250) + "\n")
-            : "\n";
+	    if (taxaEntrega == null) {
+	        taxaEntrega = estabelecimento == null ? null : estabelecimento.getTaxaEntregaPadrao();
+	    }
 
-        String corpo =
-            "🔎 *Revise seu pedido antes de enviar*\n\n" +
-                "🛒 *Itens:*\n" +
-                msg.trunc(itensTexto, 650) + "\n\n" +
-                "*Total:* " + msg.formatarMoeda(total) + "\n\n" +
-                "📍 *Entrega:*\n" +
-                "*" + endereco + "*\n" +
-                obsFmt +
-                "💳 *Pagamento:* " + pagamento + "\n\n" +
-                "Se estiver tudo certo, confirme o envio ✅";
+	    if (taxaEntrega == null) {
+	        taxaEntrega = BigDecimal.ZERO;
+	    }
 
-        List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
-            helperService.btn("COMANDO|ENVIAR_PEDIDO", "✅ Confirmar e enviar"),
-            helperService.btn("COMANDO|VISUALIZAR_CARRINHO", "✏️ Ajustar carrinho"),
-            helperService.btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Adicionar itens")
-        );
+	    BigDecimal totalGeral = subtotalItens.add(taxaEntrega);
 
-        return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
-    }
+	    String endereco = msg.trunc(msg.safe(s.getEnderecoEntrega()), 650);
+
+	    String obs = msg.safe(s.getObservacoesEntrega());
+	    String obsFmt = StringUtils.hasText(obs)
+	        ? ("\n*Obs:* " + msg.trunc(obs, 250) + "\n")
+	        : "\n";
+
+	    String corpo =
+	        "🔎 *Revise seu pedido antes de enviar*\n\n" +
+	            "🛒 *Itens:*\n" +
+	            msg.trunc(itensTexto, 650) + "\n\n" +
+	            "*Subtotal:* " + msg.formatarMoeda(subtotalItens) + "\n" +
+	            "*Taxa de entrega:* " + msg.formatarMoeda(taxaEntrega) + "\n" +
+	            "*Total:* " + msg.formatarMoeda(totalGeral) + "\n\n" +
+	            "📍 *Entrega:*\n" +
+	            "*" + endereco + "*\n" +
+	            obsFmt +
+	            "💳 *Pagamento:* " + pagamento + "\n\n" +
+	            "Se estiver tudo certo, confirme o envio ✅";
+
+	    List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
+	        helperService.btn("COMANDO|ENVIAR_PEDIDO", "✅ Confirmar e enviar"),
+	        helperService.btn("COMANDO|VISUALIZAR_CARRINHO", "✏️ Ajustar carrinho"),
+	        helperService.btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Adicionar itens")
+	    );
+
+	    return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
+	}
 
     public String formatarPagamentoParaTexto(SessaoAtendimentoWhatsapp s) {
 
@@ -500,5 +514,49 @@ public class OrquestradorMenusClienteService {
     public BigDecimal calcularPrecoPorQuantidade(Produto produto, int quantidade) {
         BigDecimal precoUnit = produto == null || produto.getPreco() == null ? BigDecimal.ZERO : produto.getPreco();
         return precoUnit.multiply(BigDecimal.valueOf(quantidade));
+    }
+    
+    
+    //============================================
+    //ENDEREÇO DE ENTREGA DO CLIENTE
+    //============================================
+    public MensagemWhatsappSaidaDTO montarSolicitacaoCepEntrega(String whatsappCliente) {
+
+        String corpo =
+            "Perfeito! ✅\n\n" +
+                "Agora me informe o *CEP de entrega*.\n\n" +
+                "Exemplos:\n" +
+                "24350-000\n" +
+                "ou\n" +
+                "24350000";
+
+        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
+    }
+
+    public MensagemWhatsappSaidaDTO montarEnderecoEncontradoSolicitarComplemento(
+        String whatsappCliente,
+        String enderecoBase
+    ) {
+
+        String corpo =
+            "Encontrei este endereço pelo CEP:\n\n" +
+                "*" + msg.trunc(enderecoBase, 500) + "*\n\n" +
+                "Agora me informe o *complemento* (número, apto/bloco, ponto de referência, etc.).\n\n" +
+                "Você pode incluir observações assim:\n" +
+                "- Obs: interfone 45\n" +
+                "- Obs: portaria 24h";
+
+        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
+    }
+
+    public MensagemWhatsappSaidaDTO montarSolicitacaoEnderecoCompletoFallback(String whatsappCliente) {
+
+        String corpo =
+            "Não consegui localizar o endereço pelo CEP 😕\n\n" +
+                "Por favor, me envie o *endereço completo* (rua, número, bairro) e, se quiser, observações pro entregador.\n\n" +
+                "Exemplo:\n" +
+                "Rua X, 123 - Apto 45, Bairro Y. Obs: interfone 45, portaria 24h.";
+
+        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
     }
 }
