@@ -19,6 +19,7 @@ import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
+import br.com.oraped.service.whatsapp.SessaoAtendimentoWhatsappService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
 import br.com.oraped.service.whatsapp.administrador.AdministradorWhatsappService;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +34,8 @@ public class OrquestradorMenusClienteService {
     private final OrquestradorExtracaoEstabelecimentoService extracaoService;
     private final OrquestradorMensagemHelperService helperService;
     private final OrquestradorCarrinhoService carrinhoService;
-
+    private final SessaoAtendimentoWhatsappService sessaoService;
+    
     public MensagemWhatsappSaidaDTO montarMenuPrincipal(Estabelecimento estabelecimento, String whatsappCliente) {
 
         if (administradorWhatsappService.isAdminAtivo(estabelecimento, whatsappCliente)) {
@@ -46,8 +48,8 @@ public class OrquestradorMenusClienteService {
                 "Escolha uma opção:";
 
         List<MensagemInterativaItemListaWhatsappDTO> itens = List.of(
-            helperService.row("COMANDO|FAZER_PEDIDO", "🛍️ Fazer um pedido", "Ver categorias e escolher produtos"),
-            helperService.row("COMANDO|ULTIMO_PEDIDO", "Meu último pedido", "Status / dúvidas do pedido mais recente")
+            helperService.row("COMANDO|FAZER_PEDIDO", "🛎️ Fazer um pedido", "Ver categorias e escolher produtos"),
+            helperService.row("COMANDO|ULTIMO_PEDIDO", "📄 Meu último pedido", "Status / dúvidas do pedido mais recente")
         );
 
         return msg.lista(whatsappCliente, cabecalho, "Ver opções", "Opções", itens);
@@ -62,8 +64,8 @@ public class OrquestradorMenusClienteService {
         String cabecalho = "Escolha uma opção:";
 
         List<MensagemInterativaItemListaWhatsappDTO> itens = List.of(
-            helperService.row("COMANDO|FAZER_PEDIDO", "Fazer um pedido", "Ver categorias e escolher produtos"),
-            helperService.row("COMANDO|ULTIMO_PEDIDO", "Meu último pedido", "Status / dúvidas do pedido mais recente")
+            helperService.row("COMANDO|FAZER_PEDIDO", "🛎️ Fazer um pedido", "Ver categorias e escolher produtos"),
+            helperService.row("COMANDO|ULTIMO_PEDIDO", "📄 Meu último pedido", "Status / dúvidas do pedido mais recente")
         );
 
         return msg.lista(whatsappCliente, cabecalho, "Ver opções", "Opções", itens);
@@ -304,20 +306,74 @@ public class OrquestradorMenusClienteService {
         );
     }
 
-    public MensagemWhatsappSaidaDTO montarEscolhaFormaPagamento(String whatsappCliente) {
+    public MensagemWhatsappSaidaDTO montarEscolhaFormaPagamento(
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    Long idSessao
+	) {
 
-        String corpo =
-            "Como deseja pagar?\n\n" +
-                "Escolha uma opção:";
+	    Map<Long, Integer> carrinho = carrinhoService.montarCarrinhoAtual(idSessao);
 
-        List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
-            helperService.btn("COMANDO|SELECIONAR_PAGAMENTO|DINHEIRO", "💵 Dinheiro"),
-            helperService.btn("COMANDO|SELECIONAR_PAGAMENTO|CREDITO", "💳 Cartão (Crédito)"),
-            helperService.btn("COMANDO|SELECIONAR_PAGAMENTO|DEBITO_PIX", "🏧 Débito/PIX")
-        );
+	    BigDecimal subtotalItens = BigDecimal.ZERO;
 
-        return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
-    }
+	    if (carrinho != null && !carrinho.isEmpty()) {
+
+	        for (var entry : carrinho.entrySet()) {
+
+	            Long idProduto = entry.getKey();
+	            int qtd = entry.getValue() == null ? 0 : entry.getValue();
+
+	            if (qtd <= 0) {
+	                continue;
+	            }
+
+	            Produto p = extracaoService.extrairProduto(estabelecimento, idProduto);
+
+	            if (p == null) {
+	                continue;
+	            }
+
+	            subtotalItens = subtotalItens.add(calcularPrecoPorQuantidade(p, qtd));
+	        }
+	    }
+
+	    // taxa de entrega: sessão > taxa padrão da loja > 0
+	    BigDecimal taxaEntrega = BigDecimal.ZERO;
+
+	    if (idSessao != null) {
+	        SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
+
+	        if (s.getTaxaEntregaCalculada() != null) {
+	            taxaEntrega = s.getTaxaEntregaCalculada();
+	        } else if (estabelecimento != null && estabelecimento.getTaxaEntregaPadrao() != null) {
+	            taxaEntrega = estabelecimento.getTaxaEntregaPadrao();
+	        }
+	    } else if (estabelecimento != null && estabelecimento.getTaxaEntregaPadrao() != null) {
+	        taxaEntrega = estabelecimento.getTaxaEntregaPadrao();
+	    }
+
+	    if (taxaEntrega == null) {
+	        taxaEntrega = BigDecimal.ZERO;
+	    }
+
+	    BigDecimal totalGeral = subtotalItens.add(taxaEntrega);
+
+	    String corpo =
+	        "💰 *Resumo do pedido*\n\n" +
+	            "*Subtotal:* " + msg.formatarMoeda(subtotalItens) + "\n" +
+	            "*Taxa de entrega:* " + msg.formatarMoeda(taxaEntrega) + "\n" +
+	            "*Total:* " + msg.formatarMoeda(totalGeral) + "\n\n" +
+	            "Como deseja pagar?\n\n" +
+	            "Escolha uma opção:";
+
+	    List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
+	        helperService.btn("COMANDO|SELECIONAR_PAGAMENTO|DINHEIRO", "💵 Dinheiro"),
+	        helperService.btn("COMANDO|SELECIONAR_PAGAMENTO|CREDITO", "💳 Cartão (Crédito)"),
+	        helperService.btn("COMANDO|SELECIONAR_PAGAMENTO|DEBITO_PIX", "🏧 Débito/PIX")
+	    );
+
+	    return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
+	}
 
     public MensagemWhatsappSaidaDTO montarPerguntaTrocoSimNao(String whatsappCliente) {
 
@@ -411,7 +467,7 @@ public class OrquestradorMenusClienteService {
 	            "*Taxa de entrega:* " + msg.formatarMoeda(taxaEntrega) + "\n" +
 	            "*Total:* " + msg.formatarMoeda(totalGeral) + "\n\n" +
 	            "📍 *Entrega:*\n" +
-	            "*" + endereco + "*\n" +
+	            endereco + "\n" +
 	            obsFmt +
 	            "💳 *Pagamento:* " + pagamento + "\n\n" +
 	            "Se estiver tudo certo, confirme o envio ✅";
@@ -447,22 +503,29 @@ public class OrquestradorMenusClienteService {
         return "Dinheiro";
     }
 
-    public MensagemWhatsappSaidaDTO montarSugestaoEnderecoAnterior(String whatsappCliente, String enderecoAnterior) {
+    public MensagemWhatsappSaidaDTO montarSugestaoEnderecoAnterior(
+	    String whatsappCliente,
+	    String enderecoAnterior,
+	    BigDecimal taxaEntrega
+	) {
 
-        String corpo =
-            "Encontrei um endereço usado no seu último pedido:\n\n" +
-                "*" + msg.trunc(enderecoAnterior, 900) + "*\n\n" +
-                "Deseja usar esse mesmo?";
+	    BigDecimal taxa = (taxaEntrega == null) ? BigDecimal.ZERO : taxaEntrega;
 
-        return msg.botoes(
-            whatsappCliente,
-            msg.trunc(corpo, 1024),
-            List.of(
-                helperService.btn("COMANDO|FAZER_PEDIDO_COM_ENDERECO_ANTERIOR", "✅ Usar esse mesmo"),
-                helperService.btn("COMANDO|INFORMAR_OUTRO_ENDERECO", "✏️ Alterar endereço")
-            )
-        );
-    }
+	    String corpo =
+	        "Encontrei um endereço usado no seu último pedido:\n\n" +
+	            msg.trunc(enderecoAnterior, 900) + "\n\n" +
+	            "🚚 Taxa de entrega para este pedido: " + msg.formatarMoeda(taxa) + "\n\n" +
+	            "Deseja usar esse mesmo?";
+
+	    return msg.botoes(
+	        whatsappCliente,
+	        msg.trunc(corpo, 1024),
+	        List.of(
+	            helperService.btn("COMANDO|FAZER_PEDIDO_COM_ENDERECO_ANTERIOR", "✅ Usar esse mesmo"),
+	            helperService.btn("COMANDO|INFORMAR_OUTRO_ENDERECO", "✏️ Alterar endereço")
+	        )
+	    );
+	}
 
     public MensagemWhatsappSaidaDTO montarSolicitacaoEnderecoEntrega(String whatsappCliente) {
 

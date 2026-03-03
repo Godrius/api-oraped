@@ -16,7 +16,6 @@ import jakarta.persistence.Index;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -25,12 +24,6 @@ import lombok.Setter;
 @Entity
 @Table(
     name = "sessao_atendimento_whatsapp",
-    uniqueConstraints = {
-        @UniqueConstraint(
-            name = "uk_sessao_whatsapp_cliente_receptor",
-            columnNames = {"whatsapp_cliente", "whatsapp_receptor"}
-        )
-    },
     indexes = {
         @Index(name = "idx_sessao_whatsapp_cliente", columnList = "whatsapp_cliente"),
         @Index(name = "idx_sessao_whatsapp_receptor", columnList = "whatsapp_receptor")
@@ -58,6 +51,9 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "ultima_interacao_em", nullable = false)
     private OffsetDateTime ultimaInteracaoEm;
 
+    @Column(name = "encerrada_em")
+    private OffsetDateTime encerradaEm;
+    
     // =========================================================
     // FLUXO CLIENTE — Pedido em andamento
     // =========================================================
@@ -72,7 +68,17 @@ public class SessaoAtendimentoWhatsapp {
     private String observacoesEntrega;
 
     // =========================================================
-    // NOVO: Endereço estruturado (cliente)
+    // CLIENTE — Quantidade manual (digitação)
+    // =========================================================
+
+    @Column(name = "aguardando_quantidade_manual", nullable = false)
+    private Boolean aguardandoQuantidadeManual;
+
+    @Column(name = "id_produto_quantidade_manual")
+    private Long idProdutoQuantidadeManual;
+    
+    // =========================================================
+    // Endereço estruturado (cliente)
     // =========================================================
 
     @Column(name = "cep_entrega", length = 8)
@@ -232,6 +238,10 @@ public class SessaoAtendimentoWhatsapp {
 
         if (aguardandoTaxaEntregaPadrao == null) {
             aguardandoTaxaEntregaPadrao = false;
+        }
+        
+        if (aguardandoQuantidadeManual == null) {
+            aguardandoQuantidadeManual = false;
         }
     }
 

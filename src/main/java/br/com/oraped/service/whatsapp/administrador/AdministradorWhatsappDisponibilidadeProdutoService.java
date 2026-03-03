@@ -18,7 +18,7 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class AdministradorWhatsappProdutoDisponibilidadeService {
+public class AdministradorWhatsappDisponibilidadeProdutoService {
 
     private static final int LIST_MAX_ROWS = 10;
 

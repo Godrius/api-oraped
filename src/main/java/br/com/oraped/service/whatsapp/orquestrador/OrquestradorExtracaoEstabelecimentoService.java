@@ -41,7 +41,7 @@ public class OrquestradorExtracaoEstabelecimentoService {
 
         return e.getProdutos().stream()
             .filter(Objects::nonNull)
-            .filter(p -> p.getCategoria() != null && Objects.equals(p.getCategoria().getId(), idCategoria))
+            .filter(p -> p.isDisponivelParaVenda() && p.getCategoria() != null && Objects.equals(p.getCategoria().getId(), idCategoria))
             .toList();
     }
 

@@ -13,7 +13,7 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class AdministradorWhatsappAdminMenuService {
+public class AdministradorWhatsappMenuAdminService {
 
     private final EstabelecimentoService estabelecimentoService;
     private final AdministradorWhatsappSupport sup;
@@ -65,6 +65,8 @@ public class AdministradorWhatsappAdminMenuService {
         itens.add(sup.row("COMANDO|ADMIN_CARDAPIO_MENU", "Revisar cardápio", "Produtos e marcas"));
         itens.add(sup.row("COMANDO|ADMIN_ENTREGAS_MENU", "Taxas de entrega", "CEP da loja e taxas por bairro"));
 
+        itens.add(sup.row("COMANDO|ADMIN_RELATORIOS_MENU", "Relatórios", "Indicadores de hoje, ontem, semana e mês"));
+        
         return new AdministradorWhatsappResultados.ResultadoAdmin(
             "admin_menu",
             sup.msg().lista(whatsappAdmin, sup.msg().truncWord(cabecalho, 1024), "Ver opções", "Admin", itens)

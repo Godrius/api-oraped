@@ -45,7 +45,7 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class OrquestradorWhatsappService_old {
+public class OLD_OrquestradorWhatsapp_Service_old {
 
     private final AdministradorWhatsappService administradorWhatsappService;
     private final EstabelecimentoService estabelecimentoService;

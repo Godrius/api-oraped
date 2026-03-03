@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorRoteamentoClienteService.java
 package br.com.oraped.service.whatsapp.orquestrador;
 
 import org.springframework.stereotype.Service;
@@ -9,6 +8,7 @@ import br.com.oraped.domain.enums.StatusPedido;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.dto.PedidoResponseDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
+import br.com.oraped.service.EstabelecimentoService;
 import br.com.oraped.service.PedidoService;
 import br.com.oraped.service.whatsapp.ComandoWhatsapp;
 import br.com.oraped.service.whatsapp.SessaoAtendimentoWhatsappService;
@@ -21,22 +21,25 @@ public class OrquestradorRoteamentoClienteService {
 
     private final SessaoAtendimentoWhatsappService sessaoService;
     private final PedidoService pedidoService;
-
+    private final EstabelecimentoService estabelecimentoService;
+    
     private final OrquestradorParseService parse;
     private final OrquestradorMenusClienteService menus;
     private final OrquestradorFluxoClienteService fluxo;
     private final OrquestradorRevisaoPedidoService revisao;
-
+    
     private final WhatsappMensagemFactory msg;
 
     public RoteamentoResultado rotearCliente(
-        Estabelecimento estabelecimento,
-        String whatsappCliente,
-        String whatsappReceptor,
-        String phoneNumberId,
-        Long idSessao,
-        ComandoWhatsapp cmd
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    String whatsappReceptor,
+	    String phoneNumberId,
+	    String idCorrelacao,
+	    String wamidEntrada,
+	    Long idSessao,
+	    ComandoWhatsapp cmd
+	) {
 
         String acao = cmd == null ? null : cmd.getAcao();
 
@@ -115,10 +118,16 @@ public class OrquestradorRoteamentoClienteService {
             }
 
             case "SOLICITAR_QUANTIDADE": {
+
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+
+                sessaoService.marcarAguardandoQuantidadeManual(idSessao, idProduto);
+
                 MensagemWhatsappSaidaDTO m = msg.texto(
                     whatsappCliente,
                     "Certo! Me informe a quantidade desejada para o produto.\n\nExemplo: 15"
                 );
+
                 return new RoteamentoResultado("solicitar_quantidade_manual", m);
             }
 
@@ -280,6 +289,36 @@ public class OrquestradorRoteamentoClienteService {
             case "REVISAO_CONFIRMAR_ENTREGA": {
                 Long idPedido = parse.parseLongObrigatorio(cmd.getParte(2), "idPedido");
                 return revisao.tratarRevisaoConfirmarEntrega(estabelecimento, whatsappCliente, idPedido);
+            }
+            
+            //QUANDO O ESTABELECIMENTO ESTÁ FECHADO O CLIENTE PODE PEDIR PARA SER NOTIFICADO QUANDO ABRIR
+            case "CADASTRAR_NOTIFICACAO_ESTABELECIMENTO_ABERTO": {
+
+                if (estabelecimento != null && estabelecimento.isAberto()) {
+                    MensagemWhatsappSaidaDTO m = msg.texto(
+                        whatsappCliente,
+                        "✅ O estabelecimento já está *aberto*.\n\n" +
+                            "Você já pode fazer seu pedido agora. 🙂"
+                    );
+                    return new RoteamentoResultado("notificacao_estabelecimento_ja_aberto", m);
+                }
+
+                boolean criado = estabelecimentoService.solicitarNotificacaoQuandoAbrir(
+                    estabelecimento.getId(),
+                    whatsappCliente,
+                    phoneNumberId,
+                    wamidEntrada,
+                    idCorrelacao
+                );
+
+                MensagemWhatsappSaidaDTO m = msg.texto(
+                    whatsappCliente,
+                    criado
+                        ? "✅ Combinado! Vou te avisar assim que o estabelecimento abrir."
+                        : "✅ Você já está na lista para ser avisado quando o estabelecimento abrir."
+                );
+
+                return new RoteamentoResultado("notificacao_estabelecimento_cadastrada", m);
             }
 
             default:

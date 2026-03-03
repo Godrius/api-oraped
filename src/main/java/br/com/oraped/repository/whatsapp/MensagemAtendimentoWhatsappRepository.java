@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import br.com.oraped.domain.whatsapp.MensagemAtendimentoWhatsapp;
 import br.com.oraped.domain.whatsapp.MensagemAtendimentoWhatsapp.Direcao;
@@ -14,4 +17,9 @@ public interface MensagemAtendimentoWhatsappRepository extends JpaRepository<Men
   Optional<MensagemAtendimentoWhatsapp> findTop1ByIdSessaoAndDirecaoOrderByCriadaEmDesc(Long idSessao, Direcao direcao);
 
   List<MensagemAtendimentoWhatsapp> findByIdSessaoAndDirecaoOrderByCriadaEmAsc(Long idSessao, Direcao direcao);
+  
+  @Modifying
+  @Query("delete from MensagemAtendimentoWhatsapp m where m.idSessao = :idSessao")
+  void deleteByIdSessao(@Param("idSessao") Long idSessao);
+
 }

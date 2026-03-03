@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorRegistroMensagemService.java
 package br.com.oraped.service.whatsapp.orquestrador;
 
 import org.springframework.stereotype.Service;

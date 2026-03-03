@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorTextoLivreService.java
 package br.com.oraped.service.whatsapp.orquestrador;
 
 import java.util.List;
@@ -26,11 +25,13 @@ public class OrquestradorTextoLivreService {
     private final EstabelecimentoService estabelecimentoService;
 
     private final SessaoAtendimentoWhatsappService sessaoService;
-
+    private final OrquestradorRegistroMensagemService registroMensagemService;
+    
     private final OrquestradorMenusClienteService menusClienteService;
     private final OrquestradorFluxoClienteService fluxoClienteService;
     private final OrquestradorParseService parse;
-
+    private final OrquestradorMensagemHelperService mensagemHelper;
+    
     private final WhatsappMensagemFactory msg;
 
     public RoteamentoResultado tratarTextoLivre(
@@ -49,6 +50,45 @@ public class OrquestradorTextoLivreService {
 	        return new RoteamentoResultado("sessao_invalida", m);
 	    }
 
+	    boolean isAdminAtivo = administradorWhatsappService.isAdminAtivo(estabelecimento, whatsappCliente);
+
+	    // =========================================================
+	    // 0) BLOQUEIO DE ATENDIMENTO (CLIENTE)
+	    // - admin ativo NUNCA é bloqueado
+	    // - inativo: apenas informa
+	    // - fechado: oferece botão "Sim, me avise"
+	    // =========================================================
+	    if (!isAdminAtivo) {
+
+	        if (estabelecimento != null && !estabelecimento.isAtivo()) {
+
+	            MensagemWhatsappSaidaDTO saida = msg.texto(
+	                whatsappCliente,
+	                "⚠️ Este estabelecimento está *inativo* no momento.\n\n" +
+	                    "Tente novamente mais tarde."
+	            );
+
+	            return new RoteamentoResultado("estabelecimento_inativo", saida);
+	        }
+
+	        if (estabelecimento != null && !estabelecimento.isAberto()) {
+
+	            String corpo =
+	                "⏸️ No momento o estabelecimento está *fechado*.\n\n" +
+	                    "Quer que eu te avise quando abrir?";
+
+	            MensagemWhatsappSaidaDTO saida = msg.botoes(
+	                whatsappCliente,
+	                msg.trunc(corpo, 1024),
+	                List.of(
+	                	mensagemHelper.btn("COMANDO|CADASTRAR_NOTIFICACAO_ESTABELECIMENTO_ABERTO", "Sim, me avise")
+	                )
+	            );
+
+	            return new RoteamentoResultado("estabelecimento_fechado_aviso", saida);
+	        }
+	    }
+
 	    // =========================================================
 	    // Comando "MENU" (atalho)
 	    // =========================================================
@@ -57,34 +97,24 @@ public class OrquestradorTextoLivreService {
 
 	        String upper = txtLivre.trim().toUpperCase(Locale.ROOT);
 
-	        if ("MENU".equals(upper)) {
+            if ("MENU".equals(upper)) {
 
-	            // Limpa apenas o fluxo genérico do cliente (campo "aguardando")
-	            // Obs: não mexe em flags de admin; admin tem seus próprios fluxos.
-	            sessaoService.limparAguardando(idSessao);
+                sessaoService.limparAguardando(idSessao);
 
-	            MensagemWhatsappSaidaDTO mensagemSaida = temSaidaAnterior
-	                ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
-	                : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
+                MensagemWhatsappSaidaDTO mensagemSaida = temSaidaAnterior
+                    ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
+                    : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
 
-	            return new RoteamentoResultado("menu_principal", mensagemSaida);
-	        }
+                return new RoteamentoResultado("menu_principal", mensagemSaida);
+            }
 	    }
 
 	    // =========================================================
 	    // 0) Admin aguardando digitação (prioridade máxima)
-	    //
-	    // IMPORTANTE:
-	    // - TUDO que for "admin por digitação" deve ficar dentro desse if.
-	    // - Caso contrário, um cliente pode cair em um estado de admin
-	    //   e o texto dele será interpretado como comando/configuração.
 	    // =========================================================
-	    boolean isAdminAtivo = administradorWhatsappService.isAdminAtivo(estabelecimento, whatsappCliente);
-
 	    if (isAdminAtivo) {
 
 	        if (sessaoService.isAguardandoNovoPreco(idSessao)) {
-
 	            var r = administradorWhatsappService.concluirPrecoManualProdutoPorDigitacao(
 	                estabelecimento,
 	                whatsappCliente,
@@ -105,31 +135,26 @@ public class OrquestradorTextoLivreService {
 	        }
 
 	        if (sessaoService.isAguardandoNovoNomeProduto(idSessao)) {
-
 	            var r = administradorWhatsappService.concluirAlteracaoNomeProdutoPorDigitacao(
 	                estabelecimento,
 	                whatsappCliente,
 	                idSessao,
 	                parse.safeTextoEntrada(req)
 	            );
-
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
 	        if (sessaoService.isAguardandoNovaDescricaoProduto(idSessao)) {
-
 	            var r = administradorWhatsappService.concluirAlteracaoDescricaoProdutoPorDigitacao(
 	                estabelecimento,
 	                whatsappCliente,
 	                idSessao,
 	                parse.safeTextoEntrada(req)
 	            );
-
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
 	        if (sessaoService.isAguardandoNovaMarca(idSessao)) {
-
 	            var r = administradorWhatsappService.concluirCadastroMarcaPorDigitacao(
 	                estabelecimento,
 	                whatsappCliente,
@@ -148,7 +173,6 @@ public class OrquestradorTextoLivreService {
 	        }
 
 	        if (sessaoService.isAguardandoEditarMarcaNome(idSessao)) {
-
 	            var r = administradorWhatsappService.concluirAlteracaoNomeMarcaPorDigitacao(
 	                estabelecimento,
 	                whatsappCliente,
@@ -201,8 +225,6 @@ public class OrquestradorTextoLivreService {
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
-	        // ✅ CORREÇÃO: Taxa padrão também é fluxo de ADMIN por digitação
-	        // Se isso ficar fora do if(isAdminAtivo), um cliente pode “cair” aqui e salvar o CEP como dinheiro.
 	        if (sessaoService.isAguardandoTaxaEntregaPadrao(idSessao)) {
 
 	            AdministradorWhatsappService.ResultadoAdmin r =
@@ -222,17 +244,7 @@ public class OrquestradorTextoLivreService {
 	        }
 	    }
 
-	    // =========================================================
-	    // FAILSAFE (recomendado):
-	    // Se NÃO é admin ativo, ignoramos qualquer estado de admin remanescente.
-	    //
-	    // Motivo:
-	    // - evita “sessão contaminada” (ex.: admin abriu menu e largou, depois cliente manda CEP).
-	    // - não depende de fluxo perfeito para não causar dano.
-	    //
-	    // Observação:
-	    // - Só limpamos estados de admin, não mexe no fluxo cliente.
-	    // =========================================================
+	    // FAILSAFE: limpa estados admin remanescentes para não-admin
 	    if (!isAdminAtivo) {
 	        if (sessaoService.isAguardandoTaxaEntregaPadrao(idSessao)) {
 	            sessaoService.limparAguardandoTaxaEntregaPadrao(idSessao);
@@ -245,9 +257,82 @@ public class OrquestradorTextoLivreService {
 	        }
 	    }
 
-	    // =========================================================
-	    // 1) Fluxo cliente aguardando texto (CEP -> complemento -> fallback)
-	    // =========================================================
+	    // Fluxos do cliente
+        
+	 // =========================================================
+	 // CLIENTE: Quantidade manual (digitação)
+	 // =========================================================
+	 if (sessaoService.isAguardandoQuantidadeManual(idSessao)) {
+
+	     String raw = msg.safe(parse.safeTextoEntrada(req));
+
+	     Integer quantidade = extrairQuantidadeInteira(raw);
+
+	     if (quantidade == null || quantidade.intValue() <= 0) {
+
+	         // Mantém aguardando quantidade manual
+	         MensagemWhatsappSaidaDTO m = msg.texto(
+	             whatsappCliente,
+	             "Quantidade inválida 😕\n\n" +
+	                 "Me informe um número inteiro maior que zero.\n\n" +
+	                 "Exemplo: 15"
+	         );
+
+	         return new RoteamentoResultado("quantidade_manual_invalida", m);
+	     }
+
+	     Long idProduto = sessaoService.getIdProdutoQuantidadeManual(idSessao);
+
+	     if (idProduto == null) {
+
+	         // Segurança: se perdeu o contexto, limpa e volta menu
+	         sessaoService.limparAguardando(idSessao);
+
+	         MensagemWhatsappSaidaDTO fallback = temSaidaAnterior
+	             ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
+	             : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
+
+	         return new RoteamentoResultado("quantidade_manual_sem_produto", fallback);
+	     }
+
+	     // ----------------------------------------------------------------
+	     // IMPORTANTE:
+	     // O carrinho é montado a partir de entradas "COMANDO|ADICIONAR_PRODUTO|..."
+	     // Como aqui o cliente digitou "100" (texto livre), precisamos gravar
+	     // uma entrada sintética equivalente ao comando de adicionar produto.
+	     // ----------------------------------------------------------------
+	     String comandoAdicionar = "COMANDO|ADICIONAR_PRODUTO|" + idProduto + "|" + quantidade;
+
+	     // "payloadOriginal" aqui não existe (é uma entrada sintética), então vai null.
+	     registroMensagemService.registrarEntrada(idSessao, comandoAdicionar, null);
+
+	     // Agora sim: limpa o modo de digitação para não deixar estado preso
+	     sessaoService.limparAguardando(idSessao);
+
+	     // Reutiliza o fluxo já existente (monta mensagem + botões)
+	     return fluxoClienteService.tratarAdicionarProduto(
+	         estabelecimento,
+	         whatsappCliente,
+	         idProduto,
+	         quantidade
+	     );
+	 }
+        
+        // =========================================================
+        // CLIENTE: Endereço de entrega (digitação)
+        // =========================================================
+        if (sessaoService.isAguardandoEnderecoEntrega(idSessao)) {
+
+            MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarEnderecoEntregaInformado(
+                estabelecimento,
+                whatsappCliente,
+                idSessao,
+                parse.safeTextoEntrada(req)
+            );
+
+            return new RoteamentoResultado("endereco_entrega_tratado", m);
+        }
+	    
 	    if (sessaoService.isAguardandoCepEntrega(idSessao)) {
 	        MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarCepEntregaInformado(
 	            estabelecimento,
@@ -279,7 +364,7 @@ public class OrquestradorTextoLivreService {
 	    }
 
 	    if (sessaoService.isAguardandoFormaPagamento(idSessao)) {
-	        MensagemWhatsappSaidaDTO m = menusClienteService.montarEscolhaFormaPagamento(whatsappCliente);
+	    	MensagemWhatsappSaidaDTO m = menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao);
 	        return new RoteamentoResultado("forma_pagamento_menu", m);
 	    }
 
@@ -308,13 +393,35 @@ public class OrquestradorTextoLivreService {
 	        return new RoteamentoResultado("confirmacao_final", m);
 	    }
 
-	    // =========================================================
-	    // 2) Fallback: menu
-	    // =========================================================
+	    // Fallback menu
 	    MensagemWhatsappSaidaDTO fallback = temSaidaAnterior
 	        ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
 	        : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
 
 	    return new RoteamentoResultado("menu_principal", fallback);
 	}
+    
+    
+    private Integer extrairQuantidadeInteira(String raw) {
+
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+
+        String txt = raw.trim();
+
+        java.util.regex.Matcher m = java.util.regex.Pattern
+            .compile("(\\d+)")
+            .matcher(txt);
+
+        if (!m.find()) {
+            return null;
+        }
+
+        try {
+            return Integer.valueOf(m.group(1));
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }

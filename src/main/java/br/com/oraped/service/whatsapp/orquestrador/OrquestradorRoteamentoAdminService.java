@@ -405,6 +405,43 @@ public class OrquestradorRoteamentoAdminService {
 
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
+            
+            
+            // ============== RELATÓRIOS ==============
+            case "ADMIN_RELATORIOS_MENU": {
+                AdministradorWhatsappService.ResultadoAdmin r =
+                    administradorWhatsappService.montarMenuRelatorios(estabelecimento, whatsappAdmin);
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+
+            case "ADMIN_RELATORIOS_HOJE": {
+                AdministradorWhatsappService.ResultadoAdmin r =
+                    administradorWhatsappService.gerarRelatorioHoje(estabelecimento, whatsappAdmin);
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+
+            case "ADMIN_RELATORIOS_ONTEM": {
+                AdministradorWhatsappService.ResultadoAdmin r =
+                    administradorWhatsappService.gerarRelatorioOntem(estabelecimento, whatsappAdmin);
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+
+            case "ADMIN_RELATORIOS_SEMANA": {
+                AdministradorWhatsappService.ResultadoAdmin r =
+                    administradorWhatsappService.gerarRelatorioSemana(estabelecimento, whatsappAdmin);
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+
+            case "ADMIN_RELATORIOS_MES": {
+                AdministradorWhatsappService.ResultadoAdmin r =
+                    administradorWhatsappService.gerarRelatorioMes(estabelecimento, whatsappAdmin);
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
 
             default: {
                 AdministradorWhatsappService.ResultadoAdmin r =
@@ -433,10 +470,13 @@ public class OrquestradorRoteamentoAdminService {
 
         List<MensagemWhatsappSaidaDTO> extras = new ArrayList<>();
 
-        if (StringUtils.hasText(r.whatsappCliente) && StringUtils.hasText(r.textoCliente)) {
+        if (r.mensagemCliente != null) {
+            extras.add(r.mensagemCliente);
+        } else if (StringUtils.hasText(r.whatsappCliente) && StringUtils.hasText(r.textoCliente)) {
             extras.add(msg.texto(r.whatsappCliente, r.textoCliente));
         }
 
         return new RoteamentoResultado(r.admin.chave, r.admin.mensagem, extras);
+        
     }
 }

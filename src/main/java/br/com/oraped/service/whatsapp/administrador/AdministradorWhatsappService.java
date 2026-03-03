@@ -11,6 +11,7 @@ import br.com.oraped.domain.AdministradorEstabelecimento;
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.Pedido;
 import br.com.oraped.domain.enums.StatusPedido;
+import br.com.oraped.domain.enums.TipoPeriodoRelatorio;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import lombok.RequiredArgsConstructor;
 
@@ -20,13 +21,14 @@ public class AdministradorWhatsappService {
 
     private final AdministradorWhatsappSupport sup;
 
-    private final AdministradorWhatsappAdminMenuService adminMenuService;
+    private final AdministradorWhatsappMenuAdminService adminMenuService;
     private final AdministradorWhatsappPedidoService pedidoService;
-    private final AdministradorWhatsappCardapioProdutoService cardapioProdutoService;
+    private final AdministradorWhatsappCardapioService cardapioProdutoService;
     private final AdministradorWhatsappMarcaService marcaService;
-    private final AdministradorWhatsappProdutoDisponibilidadeService disponibilidadeService;
-    private final AdministradorWhatsappEntregaCepService entregaCepService;
-
+    private final AdministradorWhatsappDisponibilidadeProdutoService disponibilidadeService;
+    private final AdministradorWhatsappEntregaService entregaCepService;
+    private final AdministradorWhatsappRelatorioService relatorioService;
+    
     // =========================================================
     // Tipos (mantidos para compatibilidade com o Orquestrador)
     // =========================================================
@@ -50,8 +52,14 @@ public class AdministradorWhatsappService {
     }
 
     public static class ResultadoAdminAcaoPedido extends AdministradorWhatsappResultados.ResultadoAdminAcaoPedido {
-        public ResultadoAdminAcaoPedido(ResultadoAdmin admin, String whatsappCliente, String textoCliente) {
-            super(admin, whatsappCliente, textoCliente);
+
+        public ResultadoAdminAcaoPedido(
+            ResultadoAdmin admin,
+            String whatsappCliente,
+            String textoCliente,
+            MensagemWhatsappSaidaDTO mensagemCliente
+        ) {
+            super(admin, whatsappCliente, textoCliente, mensagemCliente);
         }
     }
 
@@ -195,7 +203,13 @@ public class AdministradorWhatsappService {
         var r = pedidoService.executarAcaoPedido(estabelecimento, whatsappAdmin, idPedido, a);
 
         ResultadoAdmin ra = new ResultadoAdmin(r.admin.chave, r.admin.mensagem);
-        return new ResultadoAdminAcaoPedido(ra, r.whatsappCliente, r.textoCliente);
+
+        return new ResultadoAdminAcaoPedido(
+            ra,
+            r.whatsappCliente,
+            r.textoCliente,
+            r.mensagemCliente
+        );
     }
 
     public String montarResumoItensDoPedido(Pedido pedido) {
@@ -482,4 +496,34 @@ public class AdministradorWhatsappService {
 	    var r = entregaCepService.concluirCadastroTaxaEntregaPadraoPorDigitacao(estabelecimento, whatsappAdmin, idSessao, textoDigitado);
 	    return new ResultadoAdmin(r.chave, r.mensagem);
 	}
+	
+	
+    // =========================================================
+    // RELATÓRIOS
+    // =========================================================
+
+    public ResultadoAdmin montarMenuRelatorios(Estabelecimento estabelecimento, String whatsappAdmin) {
+        var r = relatorioService.montarMenuRelatorios(estabelecimento, whatsappAdmin);
+        return new ResultadoAdmin(r.chave, r.mensagem);
+    }
+
+    public ResultadoAdmin gerarRelatorioHoje(Estabelecimento estabelecimento, String whatsappAdmin) {
+        var r = relatorioService.gerarRelatorio(estabelecimento, whatsappAdmin, TipoPeriodoRelatorio.HOJE);
+        return new ResultadoAdmin(r.chave, r.mensagem);
+    }
+
+    public ResultadoAdmin gerarRelatorioOntem(Estabelecimento estabelecimento, String whatsappAdmin) {
+        var r = relatorioService.gerarRelatorio(estabelecimento, whatsappAdmin, TipoPeriodoRelatorio.ONTEM);
+        return new ResultadoAdmin(r.chave, r.mensagem);
+    }
+
+    public ResultadoAdmin gerarRelatorioSemana(Estabelecimento estabelecimento, String whatsappAdmin) {
+        var r = relatorioService.gerarRelatorio(estabelecimento, whatsappAdmin, TipoPeriodoRelatorio.SEMANA_ATUAL);
+        return new ResultadoAdmin(r.chave, r.mensagem);
+    }
+
+    public ResultadoAdmin gerarRelatorioMes(Estabelecimento estabelecimento, String whatsappAdmin) {
+        var r = relatorioService.gerarRelatorio(estabelecimento, whatsappAdmin, TipoPeriodoRelatorio.MES_ATUAL);
+        return new ResultadoAdmin(r.chave, r.mensagem);
+    }
 }

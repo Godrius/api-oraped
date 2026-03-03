@@ -346,7 +346,7 @@ public class AdministradorWhatsappPedidoService {
 
         List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = new ArrayList<>();
         botoes.addAll(montarBotoesAcaoDoPedido(p));
-        botoes.add(sup.btn("COMANDO|ADMIN_VER_PEDIDOS|" + statusVoltar.name() + "|0", "📦 Voltar à lista"));
+        botoes.add(sup.btn("COMANDO|ADMIN_VER_PEDIDOS|" + statusVoltar.name() + "|0", "⬅️ Voltar à lista"));
 
         if (botoes.size() < 3) {
             botoes.add(sup.btn("COMANDO|ADMIN_MENU", "🛠️ Menu admin"));
@@ -373,7 +373,7 @@ public class AdministradorWhatsappPedidoService {
 
         if (st == StatusPedido.CRIADO) {
             botoes.add(sup.btn("COMANDO|ADMIN_CANCELAR_PEDIDO|" + idPedido, "❌ Cancelar pedido"));
-            botoes.add(sup.btn("COMANDO|ADMIN_PREPARAR_PEDIDO|" + idPedido, "🍳 Preparar pedido"));
+            botoes.add(sup.btn("COMANDO|ADMIN_PREPARAR_PEDIDO|" + idPedido, "📦 Preparar pedido"));
         } else if (st == StatusPedido.EM_PREPARO) {
             botoes.add(sup.btn("COMANDO|ADMIN_CANCELAR_PEDIDO|" + idPedido, "❌ Cancelar pedido"));
             botoes.add(sup.btn("COMANDO|ADMIN_INICIAR_ENTREGA|" + idPedido, "🏍️ Saiu p/ entrega"));
@@ -429,9 +429,18 @@ public class AdministradorWhatsappPedidoService {
         AdministradorWhatsappResultados.ResultadoAdmin detalheAtualizado = montarDetalhePedido(estabelecimento, whatsappAdmin, idPedido);
 
         String telCliente = sup.msg().normalizarSomenteDigitos(pedido.getClienteTelefone());
-        String textoCliente = montarTextoNotificacaoCliente(acao, pedido);
 
-        return new AdministradorWhatsappResultados.ResultadoAdminAcaoPedido(detalheAtualizado, telCliente, textoCliente);
+        MensagemWhatsappSaidaDTO mensagemCliente = montarMensagemNotificacaoCliente(acao, telCliente, pedido);
+
+        // mantém textoCliente como fallback (legado)
+        String textoCliente = (mensagemCliente == null) ? montarTextoNotificacaoCliente(acao, pedido) : null;
+
+        return new AdministradorWhatsappResultados.ResultadoAdminAcaoPedido(
+            detalheAtualizado,
+            telCliente,
+            textoCliente,
+            mensagemCliente
+        );
     }
 
     private String montarTextoNotificacaoCliente(AdministradorWhatsappResultados.AcaoPedidoAdmin acao, Pedido pedido) {
@@ -441,7 +450,7 @@ public class AdministradorWhatsappPedidoService {
 
         if (acao == AdministradorWhatsappResultados.AcaoPedidoAdmin.ACEITAR
             || acao == AdministradorWhatsappResultados.AcaoPedidoAdmin.PREPARAR) {
-            return "🍳 Seu pedido *#" + idPedido + "* foi *aceito* e já está em *preparo*! 🙂";
+            return "📦 Seu pedido *#" + idPedido + "* foi *aceito* e já está em *preparo*! 🙂";
         }
 
         if (acao == AdministradorWhatsappResultados.AcaoPedidoAdmin.RECUSAR) {
@@ -518,4 +527,36 @@ public class AdministradorWhatsappPedidoService {
                 return st.name();
         }
     }
+    
+    
+    private MensagemWhatsappSaidaDTO montarMensagemNotificacaoCliente(
+	    AdministradorWhatsappResultados.AcaoPedidoAdmin acao,
+	    String whatsappCliente,
+	    Pedido pedido
+	) {
+
+	    if (!StringUtils.hasText(whatsappCliente) || pedido == null) {
+	        return null;
+	    }
+
+	    Long idPedido = pedido.getId();
+	    if (idPedido == null) {
+	        return null;
+	    }
+
+	    if (acao == AdministradorWhatsappResultados.AcaoPedidoAdmin.INICIAR_ENTREGA) {
+
+	        String corpo =
+	            "🏍️ Seu pedido *#" + idPedido + "* saiu para entrega!\n\n" +
+	            "Quando receber, toque no botão abaixo para confirmar. 🙂";
+
+	        List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
+	            sup.btn("COMANDO|REVISAO_CONFIRMAR_ENTREGA|" + idPedido, "✅ Confirmar entrega")
+	        );
+
+	        return sup.msg().botoes(whatsappCliente, sup.msg().trunc(corpo, 1024), botoes);
+	    }
+
+	    return null;
+	}
 }

@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorFluxoClienteService.java
 package br.com.oraped.service.whatsapp.orquestrador;
 
 import java.math.BigDecimal;
@@ -76,21 +75,21 @@ public class OrquestradorFluxoClienteService {
             return new RoteamentoResultado("bloqueio_carrinho_vazio", saida);
         }
 
-        SessaoAtendimentoWhatsapp s = sessaoService.buscarPorId(idSessao);
+        SessaoAtendimentoWhatsapp sessao = sessaoService.buscarPorId(idSessao);
 
-        if (StringUtils.hasText(s.getEnderecoEntrega())) {
+        if (StringUtils.hasText(sessao.getEnderecoEntrega())) {
 
-            if (s.getFormaPagamento() == null) {
+            if (sessao.getFormaPagamento() == null) {
                 sessaoService.marcarAguardandoFormaPagamento(idSessao);
                 return new RoteamentoResultado(
                     "forma_pagamento_menu",
-                    menusClienteService.montarEscolhaFormaPagamento(whatsappCliente)
+                    menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao)
                 );
             }
 
-            if (s.getFormaPagamento() == FormaPagamentoPedido.DINHEIRO
-                && Boolean.TRUE.equals(s.getPrecisaTroco())
-                && s.getTrocoPara() == null
+            if (sessao.getFormaPagamento() == FormaPagamentoPedido.DINHEIRO
+                && Boolean.TRUE.equals(sessao.getPrecisaTroco())
+                && sessao.getTrocoPara() == null
             ) {
                 sessaoService.marcarAguardandoTrocoValor(idSessao);
                 return new RoteamentoResultado(
@@ -101,7 +100,7 @@ public class OrquestradorFluxoClienteService {
 
             return new RoteamentoResultado(
                 "confirmacao_final",
-                menusClienteService.montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, s)
+                menusClienteService.montarConfirmacaoFinalAntesDeEnviar(estabelecimento, whatsappCliente, sessao)
             );
         }
 
@@ -110,10 +109,16 @@ public class OrquestradorFluxoClienteService {
             .orElse(null);
 
         if (StringUtils.hasText(enderecoAnterior)) {
-            return new RoteamentoResultado(
-                "sugestao_endereco_anterior",
-                menusClienteService.montarSugestaoEnderecoAnterior(whatsappCliente, enderecoAnterior)
-            );
+        	
+        	BigDecimal taxa = sessao.getTaxaEntregaCalculada();
+        	if (taxa == null) {
+        	    taxa = estabelecimento.getTaxaEntregaPadrao();
+        	}
+
+        	return new RoteamentoResultado(
+        	    "sugestao_endereco_anterior",
+        	    menusClienteService.montarSugestaoEnderecoAnterior(whatsappCliente, enderecoAnterior, taxa)
+        	);
         }
 
         sessaoService.marcarAguardandoCepEntrega(idSessao);
@@ -154,7 +159,7 @@ public class OrquestradorFluxoClienteService {
         sessaoService.salvarEnderecoEntrega(idSessao, enderecoAnterior, null);
         sessaoService.marcarAguardandoFormaPagamento(idSessao);
 
-        MensagemWhatsappSaidaDTO m = menusClienteService.montarEscolhaFormaPagamento(whatsappCliente);
+        MensagemWhatsappSaidaDTO m = menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao);
         return new RoteamentoResultado("forma_pagamento_menu", m);
     }
 
@@ -250,7 +255,7 @@ public class OrquestradorFluxoClienteService {
             sessaoService.marcarAguardandoFormaPagamento(idSessao);
             return new RoteamentoResultado(
                 "forma_pagamento_menu",
-                menusClienteService.montarEscolhaFormaPagamento(whatsappCliente)
+                menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao)
             );
         }
 
@@ -351,7 +356,7 @@ public class OrquestradorFluxoClienteService {
         sessaoService.desmarcarAguardandoEnderecoEntrega(idSessao);
 
         sessaoService.marcarAguardandoFormaPagamento(idSessao);
-        return menusClienteService.montarEscolhaFormaPagamento(whatsappCliente);
+        return menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao);
     }
 
     public MensagemWhatsappSaidaDTO tratarValorTrocoInformado(
@@ -576,7 +581,7 @@ public class OrquestradorFluxoClienteService {
     }
 
     public void limparSessaoAposEnviar(Long idSessao) {
-        sessaoService.limparPedidoEmAndamento(idSessao);
+        sessaoService.encerrarSessao(idSessao);
     }
 
     public Estabelecimento recarregarEstabelecimentoPorWhatsapp(String whatsappReceptor) {
@@ -745,7 +750,7 @@ public class OrquestradorFluxoClienteService {
 	    sessaoService.salvarComplementoFinalizarEndereco(idSessao, enderecoFinal, parsed.observacoes);
 
 	    sessaoService.marcarAguardandoFormaPagamento(idSessao);
-	    return menusClienteService.montarEscolhaFormaPagamento(whatsappCliente);
+	    return menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao);
 	}
 
 	public MensagemWhatsappSaidaDTO tratarEnderecoCompletoFallbackInformado(
@@ -789,7 +794,7 @@ public class OrquestradorFluxoClienteService {
 	    sessaoService.salvarEnderecoEntrega(idSessao, parsed.endereco, parsed.observacoes);
 
 	    sessaoService.marcarAguardandoFormaPagamento(idSessao);
-	    return menusClienteService.montarEscolhaFormaPagamento(whatsappCliente);
+	    return menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao);
 	}
 
 	private String montarEnderecoBase(EnderecoResolvidoDTO end) {

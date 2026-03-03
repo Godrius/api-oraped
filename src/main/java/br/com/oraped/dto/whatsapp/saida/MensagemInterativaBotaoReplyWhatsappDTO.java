@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/dto/whatsapp/saida/MensagemInterativaBotaoReplyWhatsappDTO.java
 package br.com.oraped.dto.whatsapp.saida;
 
 import com.fasterxml.jackson.annotation.JsonInclude;

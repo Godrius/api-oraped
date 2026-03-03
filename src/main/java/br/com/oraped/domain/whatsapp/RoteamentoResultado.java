@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/RoteamentoResultado.java
 package br.com.oraped.domain.whatsapp;
 
 import java.util.List;

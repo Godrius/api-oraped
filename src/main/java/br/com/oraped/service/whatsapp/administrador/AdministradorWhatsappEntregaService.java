@@ -25,7 +25,7 @@ import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
-public class AdministradorWhatsappEntregaCepService {
+public class AdministradorWhatsappEntregaService {
 
     private final EstabelecimentoService estabelecimentoService;
     private final SessaoAtendimentoWhatsappService sessaoService;

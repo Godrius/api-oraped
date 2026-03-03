@@ -61,11 +61,18 @@ public final class AdministradorWhatsappResultados {
         public final ResultadoAdmin admin;
         public final String whatsappCliente;
         public final String textoCliente;
+        public final MensagemWhatsappSaidaDTO mensagemCliente;
 
-        public ResultadoAdminAcaoPedido(ResultadoAdmin admin, String whatsappCliente, String textoCliente) {
+        public ResultadoAdminAcaoPedido(
+            ResultadoAdmin admin,
+            String whatsappCliente,
+            String textoCliente,
+            MensagemWhatsappSaidaDTO mensagemCliente
+        ) {
             this.admin = admin;
             this.whatsappCliente = whatsappCliente;
             this.textoCliente = textoCliente;
+            this.mensagemCliente = mensagemCliente;
         }
     }
 }

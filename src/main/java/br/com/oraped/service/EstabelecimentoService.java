@@ -2,6 +2,11 @@
 package br.com.oraped.service;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -10,10 +15,21 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.NotificacaoAberturaEstabelecimento;
+import br.com.oraped.domain.enums.StatusNotificacaoAberturaEstabelecimento;
 import br.com.oraped.domain.geolocalizacao.Bairro;
+import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import br.com.oraped.dto.estabelecimento.EstabelecimentoCreateRequestDTO;
+import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
+import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
+import br.com.oraped.dto.whatsapp.saida.RespostaWhatsappDTO;
+import br.com.oraped.integrations.OrazzaWhatsappCallbackClient;
 import br.com.oraped.repository.EstabelecimentoRepository;
+import br.com.oraped.repository.NotificacaoAberturaEstabelecimentoRepository;
 import br.com.oraped.repository.ProdutoRepository;
+import br.com.oraped.service.whatsapp.SessaoAtendimentoWhatsappService;
+import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
+import br.com.oraped.service.whatsapp.orquestrador.OrquestradorCarrinhoService;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -21,13 +37,19 @@ import lombok.RequiredArgsConstructor;
 public class EstabelecimentoService {
 
     private final EstabelecimentoRepository estabelecimentoRepository;
-
+    
     // ⚠️ Evita ciclo (EstabelecimentoService -> ProdutoService -> MarcaProdutoService -> EstabelecimentoService)
     // Aqui a gente só precisa listar produtos; então usamos o repositório direto.
     private final ProdutoRepository produtoRepository;
 
     private final AdministradorEstabelecimentoService administradorEstabelecimentoService;
-
+    private final SessaoAtendimentoWhatsappService sessaoService;
+    private final OrquestradorCarrinhoService carrinhoService;
+    
+    private final NotificacaoAberturaEstabelecimentoRepository notificacaoAberturaRepository;
+    private final OrazzaWhatsappCallbackClient orazzaWhatsappCallbackClient;
+    private final WhatsappMensagemFactory msg;
+    
     @Transactional(readOnly = true)
     public Estabelecimento buscar(Long idEstabelecimento) {
 
@@ -70,28 +92,8 @@ public class EstabelecimentoService {
         return e;
     }
 
-    @Transactional
-    public void abrir(Long idEstabelecimento) {
-
-        Estabelecimento estabelecimento = buscar(idEstabelecimento);
-
-        if (!estabelecimento.isAberto()) {
-            estabelecimento.setAberto(true);
-            estabelecimentoRepository.save(estabelecimento);
-        }
-    }
-
-    @Transactional
-    public void fechar(Long idEstabelecimento) {
-
-        Estabelecimento estabelecimento = buscar(idEstabelecimento);
-
-        if (estabelecimento.isAberto()) {
-            estabelecimento.setAberto(false);
-            estabelecimentoRepository.save(estabelecimento);
-        }
-    }
-
+        
+    
     @Transactional
     public Estabelecimento cadastrar(EstabelecimentoCreateRequestDTO req) {
 
@@ -154,6 +156,174 @@ public class EstabelecimentoService {
         return estabelecimentoRepository.save(e);
     }
     
+    //====================================================
+    //Abrir, fechar e notificar aos clientes quando abrir
+    //====================================================
+    @Transactional
+    public void abrir(Long idEstabelecimento) {
+
+        Estabelecimento estabelecimento = buscar(idEstabelecimento);
+
+        if (!estabelecimento.isAberto()) {
+
+            estabelecimento.setAberto(true);
+            estabelecimentoRepository.save(estabelecimento);
+
+            consumirFilaNotificacoesAbertura(estabelecimento);
+        }
+    }
+
+    @Transactional
+    public boolean solicitarNotificacaoQuandoAbrir(
+	    Long idEstabelecimento,
+	    String whatsappCliente,
+	    String phoneNumberId,
+	    String wamidEntrada,
+	    String idCorrelacao
+	) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+
+        String w = normalizarWhatsapp(whatsappCliente);
+        if (!StringUtils.hasText(w)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsappCliente é obrigatório");
+        }
+
+        boolean jaExiste = notificacaoAberturaRepository
+            .findByIdEstabelecimentoAndWhatsappClienteAndStatus(
+                idEstabelecimento,
+                w,
+                StatusNotificacaoAberturaEstabelecimento.PENDENTE
+            )
+            .isPresent();
+
+        if (jaExiste) {
+            return false;
+        }
+
+        NotificacaoAberturaEstabelecimento n = new NotificacaoAberturaEstabelecimento();
+        n.setIdEstabelecimento(idEstabelecimento);
+        n.setWhatsappCliente(w);
+        n.setPhoneNumberId(phoneNumberId);
+        n.setWamidEntrada(wamidEntrada);
+        n.setIdCorrelacao(idCorrelacao);
+        n.setStatus(StatusNotificacaoAberturaEstabelecimento.PENDENTE);
+        n.setCriadoEm(OffsetDateTime.now());
+        n.setPendenteKey(1);
+
+        notificacaoAberturaRepository.save(n);
+        return true;
+    }
+
+    @Transactional
+    public int consumirFilaNotificacoesAbertura(Estabelecimento estabelecimento) {
+
+        if (estabelecimento == null || estabelecimento.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "estabelecimento é obrigatório");
+        }
+
+        List<NotificacaoAberturaEstabelecimento> pendentes =
+            notificacaoAberturaRepository.findByIdEstabelecimentoAndStatus(
+                estabelecimento.getId(),
+                StatusNotificacaoAberturaEstabelecimento.PENDENTE
+            );
+
+        if (pendentes == null || pendentes.isEmpty()) {
+            return 0;
+        }
+
+        int enviados = 0;
+
+        for (NotificacaoAberturaEstabelecimento n : pendentes) {
+
+            String waCliente = n.getWhatsappCliente();
+
+            // 1) tenta identificar sessão e carrinho atual do cliente
+            SessaoAtendimentoWhatsapp sessao = sessaoService.obterOuCriar(
+                waCliente,
+                msg.normalizarSomenteDigitos(estabelecimento.getWhatsapp()),
+                estabelecimento.getId()
+            );
+
+            Map<Long, Integer> carrinho = carrinhoService.montarCarrinhoAtual(sessao.getId());
+            boolean temCarrinho = (carrinho != null && !carrinho.isEmpty());
+
+            // 2) monta botões
+            List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = new ArrayList<>();
+
+            botoes.add(
+                MensagemInterativaBotaoReplyWhatsappDTO.builder()
+                    .id("COMANDO|FAZER_PEDIDO")
+                    .title(msg.trunc(msg.safe("🛍️ Fazer meu pedido"), 20))
+                    .build()
+            );
+
+            if (temCarrinho) {
+                botoes.add(
+                    MensagemInterativaBotaoReplyWhatsappDTO.builder()
+                        .id("COMANDO|VISUALIZAR_CARRINHO")
+                        .title(msg.trunc(msg.safe("🛒 Ver carrinho"), 20))
+                        .build()
+                );
+            }
+
+            // 3) mensagem
+            String corpo =
+                "✅ O estabelecimento *" + safeNome(estabelecimento.getNome()) + "* acabou de abrir!\n\n" +
+                    (temCarrinho
+                        ? "Vi que você tinha itens no carrinho. Quer continuar de onde parou? 🙂"
+                        : "Você já pode fazer seu pedido agora. 🙂");
+
+            MensagemWhatsappSaidaDTO mensagemSaida = msg.botoes(
+                waCliente,
+                msg.trunc(corpo, 1024),
+                botoes
+            );
+
+            RespostaWhatsappDTO resposta = RespostaWhatsappDTO.builder()
+                .idCorrelacao(n.getIdCorrelacao() != null
+                    ? n.getIdCorrelacao()
+                    : UUID.randomUUID().toString())
+                .timestamp(OffsetDateTime.now().toString())
+                .canal("WHATSAPP")
+                .whatsappCliente(waCliente)
+                .whatsappReceptor(msg.normalizarSomenteDigitos(estabelecimento.getWhatsapp()))
+                .phoneNumberId(n.getPhoneNumberId())
+                .wamidEntrada(n.getWamidEntrada())
+                .mensagem(mensagemSaida)
+                .mensagensExtras(List.of())
+                .build();
+
+            orazzaWhatsappCallbackClient.enviarRespostaAssincrono(resposta);
+
+            n.setStatus(StatusNotificacaoAberturaEstabelecimento.ENVIADA);
+            n.setEnviadoEm(OffsetDateTime.now());
+            n.setPendenteKey(null);
+
+            enviados++;
+        }
+
+        notificacaoAberturaRepository.saveAll(pendentes);
+
+        System.out.println("[WA] Notificacoes de abertura disparadas: " + enviados
+            + " idEstabelecimento=" + estabelecimento.getId());
+
+        return enviados;
+    }
+
+    @Transactional
+    public void fechar(Long idEstabelecimento) {
+
+        Estabelecimento estabelecimento = buscar(idEstabelecimento);
+
+        if (estabelecimento.isAberto()) {
+            estabelecimento.setAberto(false);
+            estabelecimentoRepository.save(estabelecimento);
+        }
+    }
+    
     
     // =========================
     // Taxa padrão de entrega
@@ -173,6 +343,12 @@ public class EstabelecimentoService {
         e.setTaxaEntregaPadrao(taxaEntregaPadrao);
 
         return estabelecimentoRepository.save(e);
+    }
+    
+    
+    private String safeNome(String s) {
+        String v = s == null ? "" : s.trim();
+        return v.isEmpty() ? "Estabelecimento" : v;
     }
     
     private String normalizarWhatsapp(String whatsapp) {

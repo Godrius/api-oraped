@@ -42,7 +42,8 @@ public class OrquestradorWhatsappService {
     private final OrquestradorTextoLivreService textoLivreService;
     private final OrquestradorRoteamentoService roteamentoService;
     private final OrquestradorParseService parseService;
-
+    private final OrquestradorMensagemHelperService mensagemHelper;
+    
     //======================PROCESSADOR DE MENSAGENS=====================
     public RespostaWhatsappDTO processar(MensagemWhatsappEntradaDTO req) {
 
@@ -149,7 +150,48 @@ public class OrquestradorWhatsappService {
             RoteamentoResultado roteado;
 
             try {
-                roteado = roteamentoService.rotearComando(ctx, comando);
+            	roteado = roteamentoService.rotearComando(
+        		    ctx,
+        		    comando,
+        		    req.getIdCorrelacao(),
+        		    req.getIdMensagem()
+        		);
+
+            } catch (ResponseStatusException ex) {
+
+                System.out.println("[WA] ERRO rotearComando(ResponseStatusException) status="
+                    + ex.getStatusCode().value()
+                    + " msg=" + ex.getReason()
+                );
+
+                // Se estourar "fechado" em algum ponto, devolve mensagem amigável (texto simples aqui).
+                if (ex.getStatusCode().value() == 400 && isMensagemEstabelecimentoFechado(ex.getReason())) {
+
+                    String corpo =
+        	                "⏸️ Sinto te informar, mas o estabelecimento acabou de fechar.\n\n" +
+        	                    "Quer que eu te avise quando reabrir?";
+
+    	            MensagemWhatsappSaidaDTO mensagemSaida = msg.botoes(
+    	                whatsappCliente,
+    	                msg.trunc(corpo, 1024),
+    	                List.of(
+    	                	mensagemHelper.btn("COMANDO|CADASTRAR_NOTIFICACAO_ESTABELECIMENTO_ABERTO", "Sim, me avise")
+    	                )
+    	            );
+
+                    registroMensagemService.registrarSaida(sessao.getId(), "estabelecimento_fechado", mensagemSaida);
+                    return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
+                }
+
+                MensagemWhatsappSaidaDTO mensagemSaida = msg.texto(
+                    whatsappCliente,
+                    "⚠️ Não consegui processar sua solicitação.\n\n" +
+                        "Tente novamente."
+                );
+
+                registroMensagemService.registrarSaida(sessao.getId(), "erro_roteamento_status", mensagemSaida);
+                return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
+
             } catch (Exception e) {
 
                 System.out.println("[WA] ERRO rotearComando: " + e.getClass().getName() + " - " + e.getMessage());
@@ -178,9 +220,9 @@ public class OrquestradorWhatsappService {
 
                 MensagemWhatsappSaidaDTO mensagemSaida = msg.texto(
                     whatsappCliente,
-                    "Ops! 😕\n"
-                        + "Não encontrei o estabelecimento para esse número.\n\n"
-                        + "Confira se você chamou o WhatsApp correto e tente novamente."
+                    "Ops! 😕\n" +
+                        "Não encontrei o estabelecimento para esse número.\n\n" +
+                        "Confira se você chamou o WhatsApp correto e tente novamente."
                 );
 
                 return montarResposta(req, whatsappCliente, whatsappReceptor, mensagemSaida);
@@ -189,6 +231,17 @@ public class OrquestradorWhatsappService {
             throw ex;
         }
     }
+
+    private boolean isMensagemEstabelecimentoFechado(String reason) {
+        if (!StringUtils.hasText(reason)) {
+            return false;
+        }
+
+        String r = reason.trim().toLowerCase();
+        return r.contains("estabelecimento") && r.contains("fechado");
+    }
+
+    
 
     // ======================================================================
     // RESPOSTA AO N8N
