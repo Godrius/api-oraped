@@ -1,5 +1,4 @@
-// src/main/java/br/com/oraped/service/whatsapp/ComandoWhatsapp.java
-package br.com.oraped.service.whatsapp;
+package br.com.oraped.domain.whatsapp;
 
 import java.util.ArrayList;
 import java.util.List;

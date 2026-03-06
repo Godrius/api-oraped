@@ -3,9 +3,9 @@ package br.com.oraped.service.whatsapp.orquestrador;
 import org.springframework.stereotype.Service;
 
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.OrquestradorContexto;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
-import br.com.oraped.service.whatsapp.ComandoWhatsapp;
 import lombok.RequiredArgsConstructor;
 
 @Service

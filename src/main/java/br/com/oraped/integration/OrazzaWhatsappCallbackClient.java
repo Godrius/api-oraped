@@ -1,5 +1,5 @@
 // src/main/java/br/com/oraped/integrations/OrazzaWhatsappCallbackClient.java
-package br.com.oraped.integrations;
+package br.com.oraped.integration;
 
 import java.time.Duration;
 import java.util.UUID;

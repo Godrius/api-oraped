@@ -68,7 +68,7 @@ public class OrquestradorFluxoClienteService {
                 msg.trunc("Seu carrinho está vazio 🛒\n\nInclua pelo menos 1 item para concluir o pedido.", 1024),
                 List.of(
                     helper.btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Incluir outro item"),
-                    helper.btn("COMANDO|FAZER_PEDIDO", "🛍️ Fazer um pedido")
+                    helper.btn("COMANDO|FAZER_PEDIDO", "🛎️ Fazer um pedido")
                 )
             );
 

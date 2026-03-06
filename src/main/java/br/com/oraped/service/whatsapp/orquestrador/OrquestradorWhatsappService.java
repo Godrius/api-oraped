@@ -12,6 +12,7 @@ import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.OrquestradorContexto;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
@@ -19,7 +20,6 @@ import br.com.oraped.dto.whatsapp.entrada.MensagemWhatsappEntradaDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.dto.whatsapp.saida.RespostaWhatsappDTO;
 import br.com.oraped.service.EstabelecimentoService;
-import br.com.oraped.service.whatsapp.ComandoWhatsapp;
 import br.com.oraped.service.whatsapp.MensagemAtendimentoWhatsappService;
 import br.com.oraped.service.whatsapp.SessaoAtendimentoWhatsappService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;

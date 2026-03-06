@@ -23,7 +23,7 @@ import br.com.oraped.dto.estabelecimento.EstabelecimentoCreateRequestDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.dto.whatsapp.saida.RespostaWhatsappDTO;
-import br.com.oraped.integrations.OrazzaWhatsappCallbackClient;
+import br.com.oraped.integration.OrazzaWhatsappCallbackClient;
 import br.com.oraped.repository.EstabelecimentoRepository;
 import br.com.oraped.repository.NotificacaoAberturaEstabelecimentoRepository;
 import br.com.oraped.repository.ProdutoRepository;
@@ -256,7 +256,7 @@ public class EstabelecimentoService {
             botoes.add(
                 MensagemInterativaBotaoReplyWhatsappDTO.builder()
                     .id("COMANDO|FAZER_PEDIDO")
-                    .title(msg.trunc(msg.safe("🛍️ Fazer meu pedido"), 20))
+                    .title(msg.trunc(msg.safe("🛎️ Fazer meu pedido"), 20))
                     .build()
             );
 

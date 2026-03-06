@@ -9,9 +9,9 @@ import org.springframework.util.StringUtils;
 
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.enums.StatusPedido;
+import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
-import br.com.oraped.service.whatsapp.ComandoWhatsapp;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
 import br.com.oraped.service.whatsapp.administrador.AdministradorWhatsappService;
 import lombok.RequiredArgsConstructor;
