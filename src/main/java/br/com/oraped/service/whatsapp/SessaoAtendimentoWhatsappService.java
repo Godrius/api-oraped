@@ -868,6 +868,39 @@ public class SessaoAtendimentoWhatsappService {
         s.setTaxaEntregaCalculada(null);
         s.setEnderecoBaseResolvido(null);
     }
+    
+    @Transactional
+    public void salvarEnderecoEntregaEstruturado(
+        Long idSessao,
+        String enderecoEntrega,
+        String observacoesEntrega,
+        String cepEntrega,
+        String bairroEntrega,
+        String cidadeEntrega,
+        String ufEntrega,
+        Double latitudeEntrega,
+        Double longitudeEntrega,
+        BigDecimal taxaEntregaCalculada
+    ) {
+
+        SessaoAtendimentoWhatsapp s = buscarPorId(idSessao);
+
+        s.setEnderecoEntrega(StringUtils.hasText(enderecoEntrega) ? enderecoEntrega.trim() : null);
+        s.setObservacoesEntrega(StringUtils.hasText(observacoesEntrega) ? observacoesEntrega.trim() : null);
+
+        s.setCepEntrega(StringUtils.hasText(cepEntrega) ? cepEntrega.trim() : null);
+        s.setBairroEntrega(StringUtils.hasText(bairroEntrega) ? bairroEntrega.trim() : null);
+        s.setCidadeEntrega(StringUtils.hasText(cidadeEntrega) ? cidadeEntrega.trim() : null);
+        s.setUfEntrega(StringUtils.hasText(ufEntrega) ? ufEntrega.trim() : null);
+
+        s.setLatitudeEntrega(latitudeEntrega);
+        s.setLongitudeEntrega(longitudeEntrega);
+        s.setTaxaEntregaCalculada(taxaEntregaCalculada);
+
+        s.setAguardando(null);
+
+        salvar(s);
+    }
 
     // =========================================================
     // INTERNOS

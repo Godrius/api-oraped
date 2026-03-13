@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/dto/PedidoResponseDTO.java
 package br.com.oraped.dto;
 
 import java.math.BigDecimal;
@@ -22,7 +21,9 @@ public class PedidoResponseDTO {
     private BigDecimal taxaEntrega;
     private BigDecimal total;
 
-    // NOVO: Endereço estruturado (opcional para retorno)
+    private String enderecoEntrega;
+    private String observacoes;
+
     private String cepEntrega;
     private String bairroEntrega;
     private String cidadeEntrega;
@@ -30,7 +31,6 @@ public class PedidoResponseDTO {
     private Double latitudeEntrega;
     private Double longitudeEntrega;
 
-    // usados na revisão do pedido (WhatsApp)
     private String statusLabel;
     private String resumoItens;
 
@@ -48,6 +48,9 @@ public class PedidoResponseDTO {
         this.taxaServico = pedido.getTaxaServico();
         this.taxaEntrega = pedido.getTaxaEntrega();
         this.total = pedido.getTotal();
+
+        this.enderecoEntrega = pedido.getEnderecoEntrega();
+        this.observacoes = pedido.getObservacoes();
 
         this.cepEntrega = pedido.getCepEntrega();
         this.bairroEntrega = pedido.getBairroEntrega();

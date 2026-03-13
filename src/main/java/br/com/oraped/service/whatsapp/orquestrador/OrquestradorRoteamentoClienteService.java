@@ -67,9 +67,11 @@ public class OrquestradorRoteamentoClienteService {
                 return fluxo.tratarConfirmacaoEnderecoAnterior(estabelecimento, whatsappCliente, whatsappReceptor, phoneNumberId, idSessao);
 
             case "INFORMAR_OUTRO_ENDERECO":
-                sessaoService.marcarAguardandoEnderecoEntrega(idSessao);
-                return new RoteamentoResultado("solicitar_endereco_entrega", menus.montarSolicitacaoEnderecoEntrega(whatsappCliente));
-
+                sessaoService.marcarAguardandoCepEntrega(idSessao);
+                return new RoteamentoResultado(
+                    "solicitar_cep_entrega",
+                    menus.montarSolicitacaoCepEntrega(whatsappCliente)
+                );
             case "SELECIONAR_PAGAMENTO": {
                 FormaPagamentoPedido fp = parse.parseFormaPagamento(cmd.getParte(2));
                 return fluxo.tratarSelecaoPagamento(estabelecimento, whatsappCliente, whatsappReceptor, phoneNumberId, idSessao, fp);
