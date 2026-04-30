@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
+import br.com.oraped.domain.produto.Produto;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;

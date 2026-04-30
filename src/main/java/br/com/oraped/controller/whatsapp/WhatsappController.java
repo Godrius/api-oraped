@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/controller/whatsapp/WhatsappController.java
 package br.com.oraped.controller.whatsapp;
 
 import java.nio.charset.StandardCharsets;
@@ -79,11 +78,15 @@ public class WhatsappController {
         List<MensagemWhatsappEntradaDTO> saida = new ArrayList<>();
 
         JsonNode entradas = raiz.path("entry");
-        if (!entradas.isArray()) return saida;
+        if (!entradas.isArray()) {
+            return saida;
+        }
 
         for (JsonNode entry : entradas) {
             JsonNode mudancas = entry.path("changes");
-            if (!mudancas.isArray()) continue;
+            if (!mudancas.isArray()) {
+                continue;
+            }
 
             for (JsonNode change : mudancas) {
                 JsonNode valor = change.path("value");
@@ -97,8 +100,22 @@ public class WhatsappController {
                     whatsappReceptor = phoneNumberId;
                 }
 
+                // O nome do perfil do cliente vem no bloco contacts.profile.name.
+                String nomeClienteWhatsapp = null;
+                JsonNode contacts = valor.path("contacts");
+                if (contacts.isArray() && !contacts.isEmpty()) {
+                    JsonNode contact = contacts.get(0);
+                    JsonNode profile = contact.path("profile");
+
+                    if (profile != null && profile.isObject()) {
+                        nomeClienteWhatsapp = textoOuNulo(profile, "name");
+                    }
+                }
+
                 JsonNode mensagens = valor.path("messages");
-                if (!mensagens.isArray()) continue;
+                if (!mensagens.isArray()) {
+                    continue;
+                }
 
                 for (JsonNode msg : mensagens) {
                     String whatsappCliente = normalizarSomenteDigitos(textoOuNulo(msg, "from"));
@@ -114,21 +131,63 @@ public class WhatsappController {
                     String texto = null;
                     String comando = null;
 
+                    String tipoMidia = null;
+                    String idMidia = null;
+                    String mimeTypeMidia = null;
+                    String sha256Midia = null;
+                    String urlMidia = null;
+
+                    Double latitudeLocalizacao = null;
+                    Double longitudeLocalizacao = null;
+                    String nomeLocalizacao = null;
+                    String enderecoLocalizacao = null;
+
                     if ("text".equals(tipo)) {
                         texto = msg.path("text").path("body").asText(null);
+
                     } else if ("interactive".equals(tipo)) {
                         JsonNode interactive = msg.path("interactive");
 
                         JsonNode botao = interactive.path("button_reply");
                         if (botao.isObject()) {
                             comando = botao.path("id").asText(null);
-                            if (!StringUtils.hasText(texto)) texto = botao.path("title").asText(null);
+                            if (!StringUtils.hasText(texto)) {
+                                texto = botao.path("title").asText(null);
+                            }
                         }
 
                         JsonNode lista = interactive.path("list_reply");
                         if (lista.isObject()) {
                             comando = lista.path("id").asText(null);
-                            if (!StringUtils.hasText(texto)) texto = lista.path("title").asText(null);
+                            if (!StringUtils.hasText(texto)) {
+                                texto = lista.path("title").asText(null);
+                            }
+                        }
+
+                    } else if ("image".equals(tipo)) {
+                        JsonNode image = msg.path("image");
+
+                        tipoMidia = "image";
+                        idMidia = textoOuNulo(image, "id");
+                        mimeTypeMidia = textoOuNulo(image, "mime_type");
+                        sha256Midia = textoOuNulo(image, "sha256");
+                        urlMidia = textoOuNulo(image, "url");
+
+                    } else if ("location".equals(tipo)) {
+                        JsonNode location = msg.path("location");
+
+                        // A localização compartilhada é usada pelo marketplace para descobrir quem pode atender o cliente.
+                        if (location.isObject()) {
+                            latitudeLocalizacao = location.path("latitude").isNumber()
+                                ? location.path("latitude").asDouble()
+                                : null;
+
+                            longitudeLocalizacao = location.path("longitude").isNumber()
+                                ? location.path("longitude").asDouble()
+                                : null;
+
+                            nomeLocalizacao = textoOuNulo(location, "name");
+                            enderecoLocalizacao = textoOuNulo(location, "address");
                         }
                     }
 
@@ -136,10 +195,25 @@ public class WhatsappController {
                     dto.setPhoneNumberId(phoneNumberId);
                     dto.setWhatsappCliente(whatsappCliente);
                     dto.setWhatsappReceptor(whatsappReceptor);
+                    dto.setNomeClienteWhatsapp(nomeClienteWhatsapp);
                     dto.setTexto(texto);
                     dto.setComando(comando);
                     dto.setIdMensagem(idMensagem);
                     dto.setIdCorrelacao(idCorrelacao);
+
+                    // Dados de mídia são usados pelos fluxos administrativos de envio de foto.
+                    dto.setTipoMidia(tipoMidia);
+                    dto.setIdMidia(idMidia);
+                    dto.setMimeTypeMidia(mimeTypeMidia);
+                    dto.setSha256Midia(sha256Midia);
+                    dto.setUrlMidia(urlMidia);
+
+                    // Dados de localização alimentam o fluxo inicial do marketplace.
+                    dto.setLatitudeLocalizacao(latitudeLocalizacao);
+                    dto.setLongitudeLocalizacao(longitudeLocalizacao);
+                    dto.setNomeLocalizacao(nomeLocalizacao);
+                    dto.setEnderecoLocalizacao(enderecoLocalizacao);
+
                     dto.setPayloadOriginal(raiz);
 
                     saida.add(dto);

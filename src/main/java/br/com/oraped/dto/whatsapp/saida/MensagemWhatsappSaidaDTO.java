@@ -27,4 +27,7 @@ public class MensagemWhatsappSaidaDTO {
     private MensagemTextoWhatsappDTO text;
 
     private MensagemInterativaWhatsappDTO interactive;
+
+    // Campo necessário para suportar mensagem simples do tipo "image".
+    private MensagemImagemWhatsappDTO image;
 }

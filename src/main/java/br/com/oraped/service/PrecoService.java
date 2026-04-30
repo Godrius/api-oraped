@@ -7,7 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import br.com.oraped.domain.Produto;
+import br.com.oraped.domain.produto.Produto;
+import br.com.oraped.service.produto.ProdutoService;
 import lombok.RequiredArgsConstructor;
 
 @Service

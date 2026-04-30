@@ -1,11 +1,9 @@
-// src/main/java/br/com/oraped/service/EstabelecimentoService.java
 package br.com.oraped.service;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -16,8 +14,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.NotificacaoAberturaEstabelecimento;
+import br.com.oraped.domain.carrinho.Carrinho;
 import br.com.oraped.domain.enums.StatusNotificacaoAberturaEstabelecimento;
 import br.com.oraped.domain.geolocalizacao.Bairro;
+import br.com.oraped.domain.marketplace.CategoriaMarketplace;
 import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import br.com.oraped.dto.estabelecimento.EstabelecimentoCreateRequestDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
@@ -26,10 +26,11 @@ import br.com.oraped.dto.whatsapp.saida.RespostaWhatsappDTO;
 import br.com.oraped.integration.OrazzaWhatsappCallbackClient;
 import br.com.oraped.repository.EstabelecimentoRepository;
 import br.com.oraped.repository.NotificacaoAberturaEstabelecimentoRepository;
-import br.com.oraped.repository.ProdutoRepository;
-import br.com.oraped.service.whatsapp.SessaoAtendimentoWhatsappService;
+import br.com.oraped.repository.marketplace.CategoriaMarketplaceRepository;
+import br.com.oraped.repository.marketplace.MarketplaceRepository;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
 import br.com.oraped.service.whatsapp.orquestrador.OrquestradorCarrinhoService;
+import br.com.oraped.service.whatsapp.sessao.SessaoAtendimentoWhatsappService;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -37,19 +38,17 @@ import lombok.RequiredArgsConstructor;
 public class EstabelecimentoService {
 
     private final EstabelecimentoRepository estabelecimentoRepository;
-    
-    // ⚠️ Evita ciclo (EstabelecimentoService -> ProdutoService -> MarcaProdutoService -> EstabelecimentoService)
-    // Aqui a gente só precisa listar produtos; então usamos o repositório direto.
-    private final ProdutoRepository produtoRepository;
 
-    private final AdministradorEstabelecimentoService administradorEstabelecimentoService;
     private final SessaoAtendimentoWhatsappService sessaoService;
     private final OrquestradorCarrinhoService carrinhoService;
-    
+
     private final NotificacaoAberturaEstabelecimentoRepository notificacaoAberturaRepository;
     private final OrazzaWhatsappCallbackClient orazzaWhatsappCallbackClient;
     private final WhatsappMensagemFactory msg;
-    
+
+    private final CategoriaMarketplaceRepository categoriaMarketplaceRepository;
+    private final MarketplaceRepository marketplaceRepository;
+
     @Transactional(readOnly = true)
     public Estabelecimento buscar(Long idEstabelecimento) {
 
@@ -57,8 +56,10 @@ public class EstabelecimentoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
         }
 
-        return estabelecimentoRepository.findById(idEstabelecimento)
+        Estabelecimento e = estabelecimentoRepository.findById(idEstabelecimento)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Estabelecimento não encontrado"));
+
+        return e;
     }
 
     @Transactional(readOnly = true)
@@ -76,24 +77,18 @@ public class EstabelecimentoService {
     @Transactional(readOnly = true)
     public Estabelecimento buscarPorWhatsapp(String whatsapp) {
 
-        if (whatsapp == null || whatsapp.trim().isEmpty()) {
+        if (!StringUtils.hasText(whatsapp)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsapp é obrigatório");
         }
 
         String w = normalizarWhatsapp(whatsapp);
 
-        Estabelecimento e = estabelecimentoRepository.findByWhatsapp(w)
+        Estabelecimento e = estabelecimentoRepository.findByWhatsappAndAtivoTrue(w)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Estabelecimento não encontrado"));
-
-        // carrega por repository/service para evitar MultipleBagFetchException
-        e.setProdutos(produtoRepository.findByEstabelecimentoIdOrderByNomeAsc(e.getId()));
-        e.setAdministradores(administradorEstabelecimentoService.listarAtivosPorEstabelecimento(e.getId()));
-
+        
         return e;
     }
 
-        
-    
     @Transactional
     public Estabelecimento cadastrar(EstabelecimentoCreateRequestDTO req) {
 
@@ -112,11 +107,23 @@ public class EstabelecimentoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "whatsapp é obrigatório");
         }
 
+        if (req.getIdCategoriaMarketplace() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idCategoriaMarketplace é obrigatório");
+        }
+
         String whatsappNormalizado = normalizarWhatsapp(whatsapp);
 
+        // Um número tem papel único no sistema: ou estabelecimento, ou marketplace.
         if (estabelecimentoRepository.existsByWhatsapp(whatsappNormalizado)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe estabelecimento com este whatsapp");
         }
+
+        if (marketplaceRepository.existsByWhatsapp(whatsappNormalizado)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Já existe marketplace com este whatsapp");
+        }
+
+        CategoriaMarketplace categoriaMarketplace = categoriaMarketplaceRepository.findById(req.getIdCategoriaMarketplace())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Categoria do marketplace não encontrada"));
 
         Estabelecimento e = new Estabelecimento();
         e.setNome(nome);
@@ -124,10 +131,12 @@ public class EstabelecimentoService {
         e.setTimezone(safeTrimOrNull(req.getTimezone()));
         e.setEndereco(safeTrimOrNull(req.getEndereco()));
         e.setConfiguracoesJson(req.getConfiguracoesJson());
+        e.setCategoriaMarketplace(categoriaMarketplace);
 
         if (req.getAtivo() != null) {
             e.setAtivo(req.getAtivo());
         }
+
         if (req.getAberto() != null) {
             e.setAberto(req.getAberto());
         }
@@ -135,7 +144,6 @@ public class EstabelecimentoService {
         return estabelecimentoRepository.save(e);
     }
 
-    
     @Transactional
     public Estabelecimento atualizarCepEBairroBase(Long idEstabelecimento, String cep8, Bairro bairroBase) {
 
@@ -155,17 +163,16 @@ public class EstabelecimentoService {
 
         return estabelecimentoRepository.save(e);
     }
-    
-    //====================================================
-    //Abrir, fechar e notificar aos clientes quando abrir
-    //====================================================
+
+    // ====================================================
+    // Abrir, fechar e notificar aos clientes quando abrir
+    // ====================================================
     @Transactional
     public void abrir(Long idEstabelecimento) {
 
         Estabelecimento estabelecimento = buscar(idEstabelecimento);
 
         if (!estabelecimento.isAberto()) {
-
             estabelecimento.setAberto(true);
             estabelecimentoRepository.save(estabelecimento);
 
@@ -175,12 +182,12 @@ public class EstabelecimentoService {
 
     @Transactional
     public boolean solicitarNotificacaoQuandoAbrir(
-	    Long idEstabelecimento,
-	    String whatsappCliente,
-	    String phoneNumberId,
-	    String wamidEntrada,
-	    String idCorrelacao
-	) {
+        Long idEstabelecimento,
+        String whatsappCliente,
+        String phoneNumberId,
+        String wamidEntrada,
+        String idCorrelacao
+    ) {
 
         if (idEstabelecimento == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
@@ -240,17 +247,21 @@ public class EstabelecimentoService {
 
             String waCliente = n.getWhatsappCliente();
 
-            // 1) tenta identificar sessão e carrinho atual do cliente
+            // Reaproveita a sessão do cliente no contexto exclusivo do estabelecimento.
             SessaoAtendimentoWhatsapp sessao = sessaoService.obterOuCriar(
                 waCliente,
                 msg.normalizarSomenteDigitos(estabelecimento.getWhatsapp()),
-                estabelecimento.getId()
+                estabelecimento.getId(),
+                null
             );
 
-            Map<Long, Integer> carrinho = carrinhoService.montarCarrinhoAtual(sessao.getId());
-            boolean temCarrinho = (carrinho != null && !carrinho.isEmpty());
+            Carrinho carrinho = carrinhoService.buscarCarrinhoAtual(sessao.getId());
 
-            // 2) monta botões
+	        // O carrinho oficial agora é persistido por sessão, não reconstruído pelo histórico de comandos.
+	        boolean temCarrinho = carrinho != null
+	             && carrinho.getItens() != null
+	             && !carrinho.getItens().isEmpty();
+
             List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = new ArrayList<>();
 
             botoes.add(
@@ -269,7 +280,6 @@ public class EstabelecimentoService {
                 );
             }
 
-            // 3) mensagem
             String corpo =
                 "✅ O estabelecimento *" + safeNome(estabelecimento.getNome()) + "* acabou de abrir!\n\n" +
                     (temCarrinho
@@ -323,8 +333,7 @@ public class EstabelecimentoService {
             estabelecimentoRepository.save(estabelecimento);
         }
     }
-    
-    
+
     // =========================
     // Taxa padrão de entrega
     // =========================
@@ -344,13 +353,12 @@ public class EstabelecimentoService {
 
         return estabelecimentoRepository.save(e);
     }
-    
-    
+
     private String safeNome(String s) {
         String v = s == null ? "" : s.trim();
         return v.isEmpty() ? "Estabelecimento" : v;
     }
-    
+
     private String normalizarWhatsapp(String whatsapp) {
         String digits = whatsapp.replaceAll("\\D+", "");
         return digits.trim();

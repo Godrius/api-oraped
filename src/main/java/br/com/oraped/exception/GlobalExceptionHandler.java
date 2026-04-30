@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
   public ResponseEntity<ErrorResponseDTO> handleResponseStatus(ResponseStatusException ex, HttpServletRequest req) {
 
     int status = ex.getStatusCode().value();
-    String reason = ex.getStatusCode().toString(); // ex.: "401 UNAUTHORIZED"
+    //String reason = ex.getStatusCode().toString(); // ex.: "401 UNAUTHORIZED"
     String message = (ex.getReason() != null && !ex.getReason().isBlank())
       ? ex.getReason()
       : HttpStatus.valueOf(status).getReasonPhrase();

@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/dto/whatsapp/MensagemWhatsappEntradaDTO.java
 package br.com.oraped.dto.whatsapp.entrada;
 
 import org.springframework.util.StringUtils;
@@ -14,52 +13,99 @@ import lombok.Setter;
 @Setter
 public class MensagemWhatsappEntradaDTO {
 
-	private String phoneNumberId;
-	
-	// número do cliente (remetente)
-	@NotBlank
-	@Size(max = 30)
-	private String whatsappCliente;
+    private String phoneNumberId;
 
-	// número que o cliente acionou (receptor) -> usado para identificar o estabelecimento
-	@NotBlank
-	@Size(max = 30)
-	private String whatsappReceptor;
+    // Número do cliente (remetente).
+    @NotBlank
+    @Size(max = 30)
+    private String whatsappCliente;
 
-	// texto "livre" (quando usuário digita)
-	@Size(max = 5000)
-	private String texto;
+    // Número acionado pelo cliente.
+    @NotBlank
+    @Size(max = 30)
+    private String whatsappReceptor;
 
-	// quando vier clique em lista/botão, normalmente o provider manda o "id" do item clicado.
-	// no nosso padrão esse id já será o COMANDO|...
-	@Size(max = 5000)
-	private String comando;
+    // Nome exibido no perfil do WhatsApp do cliente.
+    @Size(max = 120)
+    private String nomeClienteWhatsapp;
 
-	@Size(max = 120)
-	private String idMensagem;
+    // Texto livre digitado pelo usuário.
+    @Size(max = 5000)
+    private String texto;
 
-	@Size(max = 120)
-	private String idCorrelacao;
+    // Id do item clicado em lista/botão, normalmente no formato COMANDO|...
+    @Size(max = 5000)
+    private String comando;
 
-  	private Object payloadOriginal;
+    @Size(max = 120)
+    private String idMensagem;
 
-  	@JsonIgnore
-  	public String getTextoOuComando() {
+    @Size(max = 120)
+    private String idCorrelacao;
 
-  	    if (StringUtils.hasText(this.comando)) {
-  	        return this.comando.trim();
-  	    }
+    // =========================
+    // MÍDIA - IMAGEM
+    // =========================
 
-  	    if (StringUtils.hasText(this.texto)) {
-  	        return this.texto.trim();
-  	    }
+    @Size(max = 40)
+    private String tipoMidia;
 
-  	    return null;
-  	}
+    @Size(max = 200)
+    private String idMidia;
 
-  	@JsonIgnore
-  	public String getTextoSeguro(int max) {
-  		String v = texto == null ? "" : texto;
-  		return v.length() <= max ? v : v.substring(0, max);
-  	}
+    @Size(max = 120)
+    private String mimeTypeMidia;
+
+    @Size(max = 255)
+    private String sha256Midia;
+
+    @Size(max = 2000)
+    private String urlMidia;
+
+    // =========================
+    // LOCALIZAÇÃO COMPARTILHADA
+    // =========================
+
+    // A Meta envia latitude/longitude quando o usuário compartilha localização.
+    private Double latitudeLocalizacao;
+
+    private Double longitudeLocalizacao;
+
+    @Size(max = 255)
+    private String nomeLocalizacao;
+
+    @Size(max = 500)
+    private String enderecoLocalizacao;
+
+    private Object payloadOriginal;
+
+    @JsonIgnore
+    public String getTextoOuComando() {
+
+        if (StringUtils.hasText(this.comando)) {
+            return this.comando.trim();
+        }
+
+        if (StringUtils.hasText(this.texto)) {
+            return this.texto.trim();
+        }
+
+        return null;
+    }
+
+    @JsonIgnore
+    public String getTextoSeguro(int max) {
+        String v = texto == null ? "" : texto;
+        return v.length() <= max ? v : v.substring(0, max);
+    }
+
+    @JsonIgnore
+    public boolean isMensagemImagem() {
+        return "image".equalsIgnoreCase(tipoMidia) && StringUtils.hasText(idMidia);
+    }
+
+    @JsonIgnore
+    public boolean isMensagemLocalizacao() {
+        return latitudeLocalizacao != null && longitudeLocalizacao != null;
+    }
 }

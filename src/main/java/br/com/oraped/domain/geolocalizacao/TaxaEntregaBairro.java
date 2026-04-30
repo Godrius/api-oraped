@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/domain/geolocalizacao/TaxaEntregaBairro.java
 package br.com.oraped.domain.geolocalizacao;
 
 import java.math.BigDecimal;
@@ -11,6 +10,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
@@ -42,6 +42,22 @@ public class TaxaEntregaBairro extends BaseEntity {
     @JoinColumn(name = "bairro_id", nullable = false)
     private Bairro bairro;
 
+    // Quando isento=false, valor representa a taxa específica do bairro.
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal valor;
+
+    
+    // Diferencia frete grátis de ausência de configuração específica.
+    @Column(nullable = false)
+    private Boolean isento = false;
+
+    @PrePersist
+    public void prePersist() {
+        if (valor == null) {
+            valor = BigDecimal.ZERO;
+        }
+        if (isento == null) {
+            isento = false;
+        }
+    }
 }

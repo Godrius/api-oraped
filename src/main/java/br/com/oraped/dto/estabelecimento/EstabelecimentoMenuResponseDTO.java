@@ -8,10 +8,10 @@ import java.util.List;
 import java.util.Map;
 
 import br.com.oraped.domain.AdministradorEstabelecimento;
-import br.com.oraped.domain.CategoriaProduto;
 import br.com.oraped.domain.Estabelecimento;
-import br.com.oraped.domain.MarcaProduto;
-import br.com.oraped.domain.Produto;
+import br.com.oraped.domain.produto.CategoriaProduto;
+import br.com.oraped.domain.produto.MarcaProduto;
+import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.dto.AdministradorResumoDTO;
 import lombok.Getter;
 
@@ -32,7 +32,11 @@ public class EstabelecimentoMenuResponseDTO {
   private List<AdministradorResumoDTO> administradores;
 
   
-  public EstabelecimentoMenuResponseDTO(Estabelecimento e) {
+  public EstabelecimentoMenuResponseDTO(
+	    Estabelecimento e,
+	    List<Produto> produtos,
+	    List<AdministradorEstabelecimento> administradores
+	) {
 
 	    this.idEstabelecimento = e.getId();
 	    this.nome = e.getNome();
@@ -44,7 +48,7 @@ public class EstabelecimentoMenuResponseDTO {
 	    this.aberto = e.isAberto();
 
 	    // 1) Filtra produtos válidos para o menu
-	    List<Produto> produtos = e.getProdutos().stream()
+	    List<Produto> produtosValidos = produtos == null ? List.of() : produtos.stream()
 	      .filter(Produto::isDisponivelParaVenda)
 	      .filter(p -> p.getCategoria() != null && p.getCategoria().isAtiva())
 	      .filter(p -> p.getMarca() != null && p.getMarca().isAtiva())
@@ -54,7 +58,7 @@ public class EstabelecimentoMenuResponseDTO {
 	    // Estrutura: catId -> (marcaId -> listaProdutos)
 	    Map<Long, Map<Long, List<Produto>>> agrupado = new LinkedHashMap<>();
 
-	    for (Produto p : produtos) {
+	    for (Produto p : produtosValidos) {
 	      Long idCategoria = p.getCategoria().getId();
 	      Long idMarca = p.getMarca().getId();
 
@@ -110,7 +114,7 @@ public class EstabelecimentoMenuResponseDTO {
 	    
 	    
 	    // 4) Admins ativos (para fallback humano / notificações)
-	    this.administradores = e.getAdministradores().stream()
+	    this.administradores = administradores == null ? List.of() : administradores.stream()
 	      .filter(AdministradorEstabelecimento::isAtivo)
 	      .map(AdministradorResumoDTO::new)
 	      .toList();

@@ -117,7 +117,17 @@
 	  <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 	  <version>3.0.1</version>
 	</dependency>
+	
+	<dependency>
+	    <groupId>org.apache.httpcomponents.client5</groupId>
+	    <artifactId>httpclient5</artifactId>
+	</dependency>
 
+	<dependency>
+	    <groupId>commons-net</groupId>
+	    <artifactId>commons-net</artifactId>
+	    <version>3.8.0</version>
+	</dependency>
   </dependencies>
 
   <build>

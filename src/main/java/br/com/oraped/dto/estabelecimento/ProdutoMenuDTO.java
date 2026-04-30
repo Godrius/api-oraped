@@ -3,7 +3,7 @@ package br.com.oraped.dto.estabelecimento;
 
 import java.math.BigDecimal;
 
-import br.com.oraped.domain.Produto;
+import br.com.oraped.domain.produto.Produto;
 import lombok.Getter;
 
 @Getter

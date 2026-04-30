@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/geolocalizacao/OpenStreetMapGeolocalizacaoProvider.java
 package br.com.oraped.service.geolocalizacao;
 
 import java.net.URLEncoder;
@@ -27,6 +26,20 @@ import br.com.oraped.dto.geolocalizacao.EnderecoResolvidoDTO;
 import lombok.Getter;
 import lombok.Setter;
 
+/**
+ * Finalidade:
+ * Integrar a aplicação com serviços públicos baseados em OpenStreetMap
+ * para resolução de CEP, coordenadas e bairros próximos.
+ *
+ * Aplicação:
+ * Utilizado nos fluxos de geolocalização do marketplace e de entrega,
+ * especialmente quando é necessário descobrir bairro, cidade e UF
+ * a partir de latitude/longitude.
+ *
+ * Utilização:
+ * Deve ser consumido preferencialmente por uma camada de cache, evitando
+ * chamadas repetidas e respeitando limites operacionais do provedor externo.
+ */
 @Service
 public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvider {
 
@@ -79,28 +92,69 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
 
         if (StringUtils.hasText(out.getCidade()) && StringUtils.hasText(out.getUf())) {
 
-        	String query1 = montarQueryGeocode(out, cepLimpo);
-        	NominatimSearchItem best = geocodificarNominatim(query1);
+            String query1 = montarQueryGeocode(out, cepLimpo);
+            NominatimSearchItem best = geocodificarNominatim(query1);
 
-        	if (best == null || best.getLat() == null || best.getLon() == null) {
-        	    // fallback 1: sem logradouro (às vezes o ViaCEP vem sem logradouro)
-        	    String query2 = montarQueryGeocodeSemLogradouro(out, cepLimpo);
-        	    best = geocodificarNominatim(query2);
-        	}
+            if (best == null || best.getLat() == null || best.getLon() == null) {
+                String query2 = montarQueryGeocodeSemLogradouro(out, cepLimpo);
+                best = geocodificarNominatim(query2);
+            }
 
-        	if (best == null || best.getLat() == null || best.getLon() == null) {
-        	    // fallback 2: bairro + cidade/UF + Brasil (sem CEP no final)
-        	    String query3 = montarQueryGeocodeSomenteBairroCidadeUf(out);
-        	    best = geocodificarNominatim(query3);
-        	}
+            if (best == null || best.getLat() == null || best.getLon() == null) {
+                String query3 = montarQueryGeocodeSomenteBairroCidadeUf(out);
+                best = geocodificarNominatim(query3);
+            }
 
-        	if (best != null && best.getLat() != null && best.getLon() != null) {
-        	    out.setLatitude(parseDoubleSafe(best.getLat()));
-        	    out.setLongitude(parseDoubleSafe(best.getLon()));
-        	}
+            if (best != null && best.getLat() != null && best.getLon() != null) {
+                out.setLatitude(parseDoubleSafe(best.getLat()));
+                out.setLongitude(parseDoubleSafe(best.getLon()));
+            }
         }
 
         return out;
+    }
+
+    @Override
+    public EnderecoResolvidoDTO resolverCoordenadas(Double latitude, Double longitude) {
+
+        if (latitude == null || longitude == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "latitude/longitude são obrigatórios");
+        }
+
+        ReverseResponse reverse = reverseGeocode(latitude, longitude);
+
+        if (reverse == null || reverse.getAddress() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Não consegui resolver a localização informada");
+        }
+
+        ReverseAddress address = reverse.getAddress();
+
+        EnderecoResolvidoDTO dto = new EnderecoResolvidoDTO();
+        dto.setLatitude(latitude);
+        dto.setLongitude(longitude);
+        dto.setBairro(extrairBairro(address));
+        dto.setCidade(extrairCidade(address));
+        dto.setUf(extrairUf(address));
+
+        // Se o reverse não trouxer bairro, tentamos enriquecer usando os bairros próximos.
+        if (!StringUtils.hasText(dto.getBairro())
+            && StringUtils.hasText(dto.getCidade())
+            && StringUtils.hasText(dto.getUf())
+        ) {
+            List<EnderecoBairroProximoDTO> bairros = buscarBairrosProximos(
+                latitude,
+                longitude,
+                dto.getCidade(),
+                dto.getUf(),
+                1
+            );
+
+            if (!bairros.isEmpty() && StringUtils.hasText(bairros.get(0).getBairro())) {
+                dto.setBairro(bairros.get(0).getBairro().trim());
+            }
+        }
+
+        return dto;
     }
 
     @Override
@@ -201,6 +255,31 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
         }
     }
 
+    private ReverseResponse reverseGeocode(Double latitude, Double longitude) {
+
+        try {
+            return http.get()
+                .uri(uriBuilder -> uriBuilder
+                    .scheme("https")
+                    .host("nominatim.openstreetmap.org")
+                    .path("/reverse")
+                    .queryParam("format", "jsonv2")
+                    .queryParam("lat", latitude)
+                    .queryParam("lon", longitude)
+                    .queryParam("addressdetails", 1)
+                    .build()
+                )
+                .accept(MediaType.APPLICATION_JSON)
+                .retrieve()
+                .body(ReverseResponse.class);
+        } catch (Exception ex) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Falha ao resolver localização por coordenadas"
+            );
+        }
+    }
+
     private NominatimSearchItem geocodificarNominatim(String query) {
 
         if (!StringUtils.hasText(query)) {
@@ -276,6 +355,93 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
         }
     }
 
+    private String extrairBairro(ReverseAddress address) {
+
+        String bairro = primeiroTextoComValor(
+            address.getSuburb(),
+            address.getNeighbourhood(),
+            address.getQuarter(),
+            address.getCityDistrict()
+        );
+
+        return safe(bairro);
+    }
+
+    private String extrairCidade(ReverseAddress address) {
+
+        String cidade = primeiroTextoComValor(
+            address.getCity(),
+            address.getTown(),
+            address.getVillage(),
+            address.getMunicipality(),
+            address.getCounty()
+        );
+
+        return safe(cidade);
+    }
+
+    private String extrairUf(ReverseAddress address) {
+
+        String estado = safe(address.getState());
+
+        if (!StringUtils.hasText(estado)) {
+            return null;
+        }
+
+        return converterEstadoParaUf(estado);
+    }
+
+    private String converterEstadoParaUf(String estado) {
+
+        String normalizado = normalizar(estado);
+
+        return switch (normalizado) {
+            case "acre" -> "AC";
+            case "alagoas" -> "AL";
+            case "amapa" -> "AP";
+            case "amazonas" -> "AM";
+            case "bahia" -> "BA";
+            case "ceara" -> "CE";
+            case "distrito federal" -> "DF";
+            case "espirito santo" -> "ES";
+            case "goias" -> "GO";
+            case "maranhao" -> "MA";
+            case "mato grosso" -> "MT";
+            case "mato grosso do sul" -> "MS";
+            case "minas gerais" -> "MG";
+            case "para" -> "PA";
+            case "paraiba" -> "PB";
+            case "parana" -> "PR";
+            case "pernambuco" -> "PE";
+            case "piaui" -> "PI";
+            case "rio de janeiro" -> "RJ";
+            case "rio grande do norte" -> "RN";
+            case "rio grande do sul" -> "RS";
+            case "rondonia" -> "RO";
+            case "roraima" -> "RR";
+            case "santa catarina" -> "SC";
+            case "sao paulo" -> "SP";
+            case "sergipe" -> "SE";
+            case "tocantins" -> "TO";
+            default -> null;
+        };
+    }
+
+    private String primeiroTextoComValor(String... valores) {
+
+        if (valores == null) {
+            return null;
+        }
+
+        for (String valor : valores) {
+            if (StringUtils.hasText(valor)) {
+                return valor.trim();
+            }
+        }
+
+        return null;
+    }
+
     private String urlEncode(String s) {
         return URLEncoder.encode(s == null ? "" : s, StandardCharsets.UTF_8);
     }
@@ -321,8 +487,6 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
         return R * c;
     }
 
-    
-    
     private String montarQueryGeocodeSemLogradouro(EnderecoResolvidoDTO end, String cep8) {
 
         StringBuilder sb = new StringBuilder();
@@ -351,9 +515,7 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
 
         return sb.toString();
     }
-    
-    
-    
+
     @Getter
     @Setter
     private static class ViaCepResponse {
@@ -371,6 +533,27 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
     private static class NominatimSearchItem {
         private String lat;
         private String lon;
+    }
+
+    @Getter
+    @Setter
+    private static class ReverseResponse {
+        private ReverseAddress address;
+    }
+
+    @Getter
+    @Setter
+    private static class ReverseAddress {
+        private String suburb;
+        private String neighbourhood;
+        private String quarter;
+        private String cityDistrict;
+        private String city;
+        private String town;
+        private String village;
+        private String municipality;
+        private String county;
+        private String state;
     }
 
     @Getter

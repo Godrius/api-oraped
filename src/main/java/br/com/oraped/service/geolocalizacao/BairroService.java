@@ -3,10 +3,12 @@ package br.com.oraped.service.geolocalizacao;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -108,8 +110,12 @@ public class BairroService {
     }
 
     /**
-     * Cria/atualiza a vizinhança do bairro base, garantindo ordem.
-     * Também garante simetria (A->B e B->A).
+     * Recria a vizinhança inteira do bairro base, preservando a ordem recebida.
+     *
+     * Regras:
+     * - o próprio bairro base deve existir na vizinhança
+     * - a lista é deduplicada por id de bairro vizinho
+     * - para bairros diferentes, mantém simetria A->B e B->A
      */
     @Transactional
     public void salvarVizinhanca(Long idBairroBase, List<BairroVizinhoInputDTO> vizinhosOrdenados) {
@@ -122,12 +128,16 @@ public class BairroService {
             vizinhosOrdenados = List.of();
         }
 
-        // limpa e recria (simples e confiável para setup)
+        // Limpa a malha anterior do bairro base e força o banco a refletir isso
+        // antes das novas inserções, evitando colisão com a constraint única.
         bairroVizinhancaRepository.deleteByBairroId(idBairroBase);
+        bairroVizinhancaRepository.flush();
 
         Bairro bairroBaseRef = bairroRepository.getReferenceById(idBairroBase);
 
         int ordem = 0;
+        Set<Long> idsJaProcessados = new LinkedHashSet<>();
+
         for (BairroVizinhoInputDTO v : vizinhosOrdenados) {
 
             if (v == null || v.getIdBairroVizinho() == null) {
@@ -136,7 +146,8 @@ public class BairroService {
 
             Long idVizinho = v.getIdBairroVizinho();
 
-            if (Objects.equals(idVizinho, idBairroBase)) {
+            // Evita inserir o mesmo vizinho duas vezes na mesma reconstrução.
+            if (!idsJaProcessados.add(idVizinho)) {
                 continue;
             }
 
@@ -146,28 +157,37 @@ public class BairroService {
             rel.setBairro(bairroBaseRef);
             rel.setVizinho(bairroVizinhoRef);
             rel.setOrdem(ordem++);
-            rel.setDistanciaMetros(v.getDistanciaMetros());
+            rel.setDistanciaMetros(v.getDistanciaMetros() == null ? 0 : v.getDistanciaMetros());
 
             bairroVizinhancaRepository.save(rel);
 
-            // simetria (vizinho -> base) com ordem simplificada
+            // Para o próprio bairro, a relação já está completa.
+            if (Objects.equals(idVizinho, idBairroBase)) {
+                continue;
+            }
+
+            // Garante navegação simétrica entre bairros distintos.
             if (!bairroVizinhancaRepository.existsByBairroIdAndVizinhoId(idVizinho, idBairroBase)) {
                 BairroVizinhanca inv = new BairroVizinhanca();
                 inv.setBairro(bairroVizinhoRef);
                 inv.setVizinho(bairroBaseRef);
                 inv.setOrdem(0);
-                inv.setDistanciaMetros(v.getDistanciaMetros());
+                inv.setDistanciaMetros(v.getDistanciaMetros() == null ? 0 : v.getDistanciaMetros());
                 bairroVizinhancaRepository.save(inv);
             }
         }
+
+        bairroVizinhancaRepository.flush();
     }
 
     /**
      * Fluxo principal do setup:
      * - resolve CEP -> bairro/cidade/uf + lat/lng
-     * - findOrCreate do Bairro base
-     * - se não houver vizinhança, busca 20 bairros próximos e cria relações
-     * - retorna o bairro base (com vizinhança persistida)
+     * - findOrCreate do bairro base
+     * - sempre recompõe a vizinhança quando o CEP é informado
+     * - inclui o próprio bairro da loja como primeiro item
+     *
+     * Isso permite corrigir estabelecimentos antigos ao reenviar o mesmo CEP.
      */
     @Transactional
     public Bairro setupBairroBasePorCep(String cep) {
@@ -198,21 +218,25 @@ public class BairroService {
             end.getLongitude()
         );
 
-        boolean temVizinhanca = bairroVizinhancaRepository.existsByBairroId(base.getId());
-        if (temVizinhanca) {
+        List<BairroVizinhoInputDTO> inputs = new ArrayList<>();
+
+        // O próprio bairro da loja deve sempre aparecer na primeira posição.
+        inputs.add(criarInputVizinho(base.getId(), 0));
+
+        // Se não houver coordenadas, ainda assim garantimos ao menos o próprio bairro.
+        if (base.getLatitude() == null || base.getLongitude() == null) {
+            salvarVizinhanca(base.getId(), inputs);
             return base;
         }
 
-	     // Se não tiver coords, ainda assim retornamos o bairro base.
-	     // A vizinhança poderá ser montada depois (quando coords existirem).
-	     if (base.getLatitude() == null || base.getLongitude() == null) {
-	         return base;
-	     }
-
         List<EnderecoBairroProximoDTO> proximos =
-            geolocalizacaoProvider.buscarBairrosProximos(base.getLatitude(), base.getLongitude(), base.getCidade(), base.getUf(), 40);
-
-        List<BairroVizinhoInputDTO> inputs = new ArrayList<>();
+            geolocalizacaoProvider.buscarBairrosProximos(
+                base.getLatitude(),
+                base.getLongitude(),
+                base.getCidade(),
+                base.getUf(),
+                40
+            );
 
         if (proximos != null) {
             proximos = proximos.stream()
@@ -232,10 +256,12 @@ public class BairroService {
                     p.getLongitude()
                 );
 
-                BairroVizinhoInputDTO in = new BairroVizinhoInputDTO();
-                in.setIdBairroVizinho(viz.getId());
-                in.setDistanciaMetros(p.getDistanciaMetros());
-                inputs.add(in);
+                // Evita duplicar o próprio bairro caso o provider já o devolva na busca.
+                if (Objects.equals(viz.getId(), base.getId())) {
+                    continue;
+                }
+
+                inputs.add(criarInputVizinho(viz.getId(), p.getDistanciaMetros()));
             }
         }
 
@@ -243,8 +269,6 @@ public class BairroService {
 
         return base;
     }
-    
-    
 
     @Transactional(readOnly = true)
     public Bairro buscar(Long idBairro) {
@@ -255,6 +279,13 @@ public class BairroService {
 
         return bairroRepository.findById(idBairro)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Bairro não encontrado"));
+    }
+
+    private BairroVizinhoInputDTO criarInputVizinho(Long idBairroVizinho, Integer distanciaMetros) {
+        BairroVizinhoInputDTO in = new BairroVizinhoInputDTO();
+        in.setIdBairroVizinho(idBairroVizinho);
+        in.setDistanciaMetros(distanciaMetros == null ? 0 : distanciaMetros);
+        return in;
     }
 
     private String limpar(String s) {

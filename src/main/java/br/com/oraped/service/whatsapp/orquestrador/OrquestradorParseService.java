@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorParseService.java
 package br.com.oraped.service.whatsapp.orquestrador;
 
 import java.math.BigDecimal;
@@ -20,6 +19,24 @@ public class OrquestradorParseService {
         String v = req.getTextoOuComando();
         if (!StringUtils.hasText(v)) return "(vazio)";
         return v.length() <= 5000 ? v : v.substring(0, 5000);
+    }
+
+    public boolean hasLocalizacaoCompartilhada(MensagemWhatsappEntradaDTO req) {
+        return req != null && req.isMensagemLocalizacao();
+    }
+
+    public Double getLatitudeLocalizacao(MensagemWhatsappEntradaDTO req) {
+        if (req == null || req.getLatitudeLocalizacao() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "latitude da localização é obrigatória");
+        }
+        return req.getLatitudeLocalizacao();
+    }
+
+    public Double getLongitudeLocalizacao(MensagemWhatsappEntradaDTO req) {
+        if (req == null || req.getLongitudeLocalizacao() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "longitude da localização é obrigatória");
+        }
+        return req.getLongitudeLocalizacao();
     }
 
     public Long parseLongObrigatorio(String v, String nomeCampo) {

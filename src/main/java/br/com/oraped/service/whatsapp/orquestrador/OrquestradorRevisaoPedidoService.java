@@ -9,19 +9,23 @@ import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import br.com.oraped.domain.CategoriaProduto;
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.Pedido;
-import br.com.oraped.domain.Produto;
+import br.com.oraped.domain.carrinho.Carrinho;
+import br.com.oraped.domain.enums.FormaPagamentoPedido;
 import br.com.oraped.domain.enums.StatusPedido;
+import br.com.oraped.domain.produto.CategoriaProduto;
+import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
+import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import br.com.oraped.dto.PedidoResponseDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.service.PedidoService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
-import br.com.oraped.service.whatsapp.administrador.AdministradorWhatsappService;
+import br.com.oraped.service.whatsapp.administrador.AdminPedidoService;
+import br.com.oraped.service.whatsapp.administrador.ValidadorAdminService;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -29,11 +33,13 @@ import lombok.RequiredArgsConstructor;
 public class OrquestradorRevisaoPedidoService {
 
     private final PedidoService pedidoService;
-    private final AdministradorWhatsappService administradorWhatsappService;
-
+    private final AdminPedidoService adminPedidoService;    
+    private final ValidadorAdminService validadorAdminService;
+    
     private final OrquestradorExtracaoEstabelecimentoService extracaoService;
     private final OrquestradorMensagemHelperService helper;
-
+    private final OrquestradorCarrinhoService carrinhoService;
+    
     private final WhatsappMensagemFactory msg;
 
     public RoteamentoResultado tratarUltimoPedidoParaRevisao(
@@ -339,14 +345,15 @@ public class OrquestradorRevisaoPedidoService {
         Pedido pedidoEntidade = pedidoService.buscarEntidadeComItens(estabelecimento.getId(), idPedido);
 
         List<MensagemWhatsappSaidaDTO> extras =
-            administradorWhatsappService.montarNotificacoesMudancaPedidoParaAdmins(
+        	adminPedidoService.montarNotificacoesMudancaPedidoParaAdmins(
                 estabelecimento,
                 idPedido,
                 whatsappCliente,
                 "➕ Cliente adicionou itens",
                 pedidoEntidade.getStatus(),
-                administradorWhatsappService.montarResumoItensDoPedido(pedidoEntidade),
-                pedidoEntidade.getTotal()
+                adminPedidoService.montarResumoItensDoPedido(pedidoEntidade),
+                pedidoEntidade.getTotal(),
+                validadorAdminService.listarWhatsappsAdministradoresAtivos(estabelecimento)
             );
 
         return new RoteamentoResultado("revisao_item_adicionado", saidaCliente, extras);
@@ -373,14 +380,15 @@ public class OrquestradorRevisaoPedidoService {
         Pedido pedidoEntidade = pedidoService.buscarEntidadeComItens(estabelecimento.getId(), idPedido);
 
         List<MensagemWhatsappSaidaDTO> extras =
-            administradorWhatsappService.montarNotificacoesMudancaPedidoParaAdmins(
+        	adminPedidoService.montarNotificacoesMudancaPedidoParaAdmins(
                 estabelecimento,
                 idPedido,
                 whatsappCliente,
                 "🗑️ Cliente cancelou o pedido",
                 pedidoEntidade.getStatus(),
-                administradorWhatsappService.montarResumoItensDoPedido(pedidoEntidade),
-                pedidoEntidade.getTotal()
+                adminPedidoService.montarResumoItensDoPedido(pedidoEntidade),
+                pedidoEntidade.getTotal(),
+                validadorAdminService.listarWhatsappsAdministradoresAtivos(estabelecimento)
             );
 
         return new RoteamentoResultado("revisao_pedido_cancelado", saidaCliente, extras);
@@ -407,16 +415,103 @@ public class OrquestradorRevisaoPedidoService {
         Pedido pedidoEntidade = pedidoService.buscarEntidadeComItens(estabelecimento.getId(), idPedido);
 
         List<MensagemWhatsappSaidaDTO> extras =
-            administradorWhatsappService.montarNotificacoesMudancaPedidoParaAdmins(
+        	adminPedidoService.montarNotificacoesMudancaPedidoParaAdmins(
                 estabelecimento,
                 idPedido,
                 whatsappCliente,
                 "✅ Cliente confirmou a entrega",
                 pedidoEntidade.getStatus(),
-                administradorWhatsappService.montarResumoItensDoPedido(pedidoEntidade),
-                pedidoEntidade.getTotal()
+                adminPedidoService.montarResumoItensDoPedido(pedidoEntidade),
+                pedidoEntidade.getTotal(),
+                validadorAdminService.listarWhatsappsAdministradoresAtivos(estabelecimento)
             );
 
         return new RoteamentoResultado("revisao_entrega_confirmada", saidaCliente, extras);
     }
+    
+    
+    public MensagemWhatsappSaidaDTO montarConfirmacaoFinalAntesDeEnviar(
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    SessaoAtendimentoWhatsapp sessao
+	) {
+
+	    String pagamento = formatarPagamentoParaTexto(sessao);
+
+	    Carrinho carrinho = sessao == null ? null : carrinhoService.buscarCarrinhoAtual(sessao.getId());
+
+	    String itensTexto = carrinhoService.montarResumoItensDoCarrinho(estabelecimento, carrinho);
+	    BigDecimal subtotalItens = carrinhoService.calcularSubtotalCarrinho(carrinho);
+
+	    BigDecimal taxaEntrega = sessao == null ? null : sessao.getTaxaEntregaCalculada();
+
+	    if (taxaEntrega == null) {
+	        taxaEntrega = estabelecimento == null ? null : estabelecimento.getTaxaEntregaPadrao();
+	    }
+
+	    if (taxaEntrega == null) {
+	        taxaEntrega = BigDecimal.ZERO;
+	    }
+
+	    BigDecimal totalGeral = subtotalItens.add(taxaEntrega);
+
+	    String endereco = sessao == null ? "" : msg.trunc(msg.safe(sessao.getEnderecoEntrega()), 650);
+
+	    String observacoes = sessao == null ? "" : msg.safe(sessao.getObservacoesEntrega());
+	    String observacoesFormatadas = StringUtils.hasText(observacoes)
+	        ? ("\n*Obs:* " + msg.trunc(observacoes, 250) + "\n")
+	        : "\n";
+
+	    String corpo =
+	        "🔎 *Revise seu pedido antes de enviar*\n\n" +
+	            "🛒 *Itens:*\n\n" +
+	            msg.trunc(itensTexto, 650) + "\n\n" +
+	            "*Subtotal:* " + msg.formatarMoeda(subtotalItens) + "\n" +
+	            "*Taxa de entrega:* " + msg.formatarMoeda(taxaEntrega) + "\n" +
+	            "*Total:* " + msg.formatarMoeda(totalGeral) + "\n\n" +
+	            "📍 *Entrega:*\n" +
+	            endereco + "\n" +
+	            observacoesFormatadas +
+	            "💳 *Pagamento:* " + pagamento + "\n\n" +
+	            "Se estiver tudo certo, confirme o envio ✅";
+
+	    List<MensagemInterativaBotaoReplyWhatsappDTO> botoes = List.of(
+	        helper.btn("COMANDO|ENVIAR_PEDIDO", "✅ Confirmar e enviar"),
+	        helper.btn("COMANDO|VISUALIZAR_CARRINHO", "✏️ Ajustar carrinho"),
+	        helper.btn("COMANDO|INCLUIR_OUTRO_ITEM", "➕ Adicionar itens")
+	    );
+
+	    return msg.botoes(whatsappCliente, msg.trunc(corpo, 1024), botoes);
+	}
+
+	private String formatarPagamentoParaTexto(SessaoAtendimentoWhatsapp sessao) {
+
+	    if (sessao == null || sessao.getFormaPagamento() == null) {
+	        return "Não informado";
+	    }
+
+	    FormaPagamentoPedido formaPagamento = sessao.getFormaPagamento();
+
+	    if (formaPagamento == FormaPagamentoPedido.CREDITO) {
+	        return "Cartão (Crédito)";
+	    }
+
+	    if (formaPagamento == FormaPagamentoPedido.DEBITO_PIX) {
+	        return "Débito/PIX";
+	    }
+
+	    if (Boolean.TRUE.equals(sessao.getPrecisaTroco())) {
+	        if (sessao.getTrocoPara() != null) {
+	            return "Dinheiro (troco para " + msg.formatarMoeda(sessao.getTrocoPara()) + ")";
+	        }
+
+	        return "Dinheiro (com troco)";
+	    }
+
+	    if (Boolean.FALSE.equals(sessao.getPrecisaTroco())) {
+	        return "Dinheiro (sem troco)";
+	    }
+
+	    return "Dinheiro";
+	}
 }

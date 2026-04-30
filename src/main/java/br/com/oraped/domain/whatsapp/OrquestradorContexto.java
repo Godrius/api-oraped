@@ -15,5 +15,7 @@ public class OrquestradorContexto {
     private final String whatsappReceptor;
     private final String phoneNumberId;
 
+    private final String nomeClienteWhatsapp;
+
     private final boolean temSaidaAnterior;
 }

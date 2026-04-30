@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/WhatsappMensagemFactory.java
 package br.com.oraped.service.whatsapp;
 
 import java.math.BigDecimal;
@@ -11,23 +10,36 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import br.com.oraped.dto.whatsapp.saida.MensagemImagemWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaAcaoBotoesWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaAcaoListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaCorpoWhatsappDTO;
+import br.com.oraped.dto.whatsapp.saida.MensagemInterativaHeaderWhatsappDTO;
+import br.com.oraped.dto.whatsapp.saida.MensagemInterativaImagemWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaSecaoListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemTextoWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 
+
+/**
+ * Finalidade:
+ * Centralizar a construção das mensagens de saída enviadas ao WhatsApp em formatos
+ * como texto, imagem, botões e listas interativas.
+ *
+ * Aplicação:
+ * Utilizado por orquestradores e services conversacionais para padronizar a criação
+ * dos payloads enviados ao provedor do WhatsApp.
+ *
+ * Utilização:
+ * Deve ser usado como factory única de mensagens de saída, evitando duplicação de
+ * estrutura JSON e garantindo consistência de limites, truncamentos e formatação.
+ */
 @Component
 public class WhatsappMensagemFactory {
-
-    // =========================================================
-    // BUILDERS PRINCIPAIS (WhatsApp Cloud API)
-    // =========================================================
 
     public MensagemWhatsappSaidaDTO texto(String whatsappDestino, String corpo) {
 
@@ -35,10 +47,43 @@ public class WhatsappMensagemFactory {
             .messagingProduct("whatsapp")
             .to(normalizarSomenteDigitos(whatsappDestino))
             .type("text")
-            .text(MensagemTextoWhatsappDTO.builder()
-                .body(trunc(corpo, 4096))
-                .previewUrl(false)
-                .build())
+            .text(
+                MensagemTextoWhatsappDTO.builder()
+                    .body(trunc(corpo, 4096))
+                    .previewUrl(false)
+                    .build()
+            )
+            .build();
+    }
+
+    // Mensagem simples do tipo "image", usada quando queremos exibir a foto
+    // sem forçar um clique intermediário em botão.
+    public MensagemWhatsappSaidaDTO imagem(
+        String whatsappDestino,
+        String imageLink,
+        String imageId,
+        String legenda
+    ) {
+
+        if (!StringUtils.hasText(imageLink) && !StringUtils.hasText(imageId)) {
+            throw new IllegalArgumentException("É obrigatório informar imageLink ou imageId.");
+        }
+
+        MensagemImagemWhatsappDTO.MensagemImagemWhatsappDTOBuilder imageBuilder =
+            MensagemImagemWhatsappDTO.builder()
+                .caption(StringUtils.hasText(legenda) ? trunc(legenda, 1024) : null);
+
+        if (StringUtils.hasText(imageId)) {
+            imageBuilder.id(safe(imageId));
+        } else {
+            imageBuilder.link(safe(imageLink));
+        }
+
+        return MensagemWhatsappSaidaDTO.builder()
+            .messagingProduct("whatsapp")
+            .to(normalizarSomenteDigitos(whatsappDestino))
+            .type("image")
+            .image(imageBuilder.build())
             .build();
     }
 
@@ -59,18 +104,22 @@ public class WhatsappMensagemFactory {
             .interactive(
                 MensagemInterativaWhatsappDTO.builder()
                     .type("list")
-                    .body(MensagemInterativaCorpoWhatsappDTO.builder()
-                        .text(trunc(textoCabecalho, 1024))
-                        .build())
+                    .body(
+                        MensagemInterativaCorpoWhatsappDTO.builder()
+                            .text(trunc(textoCabecalho, 1024))
+                            .build()
+                    )
                     .action(
                         MensagemInterativaAcaoListaWhatsappDTO.builder()
                             .tituloBotao(truncWord(tituloBotao, 20))
-                            .secoes(List.of(
-                                MensagemInterativaSecaoListaWhatsappDTO.builder()
-                                    .title(truncWord(tituloSecao, 24))
-                                    .rows(rows)
-                                    .build()
-                            ))
+                            .secoes(
+                                List.of(
+                                    MensagemInterativaSecaoListaWhatsappDTO.builder()
+                                        .title(truncWord(tituloSecao, 24))
+                                        .rows(rows)
+                                        .build()
+                                )
+                            )
                             .build()
                     )
                     .build()
@@ -88,10 +137,12 @@ public class WhatsappMensagemFactory {
 
         List<MensagemInterativaBotaoWhatsappDTO> buttons = base.stream()
             .filter(Objects::nonNull)
-            .map(b -> MensagemInterativaBotaoWhatsappDTO.builder()
-                .type("reply")
-                .reply(b)
-                .build())
+            .map(
+                b -> MensagemInterativaBotaoWhatsappDTO.builder()
+                    .type("reply")
+                    .reply(b)
+                    .build()
+            )
             .collect(Collectors.toList());
 
         return MensagemWhatsappSaidaDTO.builder()
@@ -101,9 +152,11 @@ public class WhatsappMensagemFactory {
             .interactive(
                 MensagemInterativaWhatsappDTO.builder()
                     .type("button")
-                    .body(MensagemInterativaCorpoWhatsappDTO.builder()
-                        .text(trunc(corpo, 1024))
-                        .build())
+                    .body(
+                        MensagemInterativaCorpoWhatsappDTO.builder()
+                            .text(trunc(corpo, 1024))
+                            .build()
+                    )
                     .action(
                         MensagemInterativaAcaoBotoesWhatsappDTO.builder()
                             .buttons(buttons)
@@ -114,9 +167,74 @@ public class WhatsappMensagemFactory {
             .build();
     }
 
-    // =========================================================
-    // HELPERS REUTILIZÁVEIS (utilitários comuns)
-    // =========================================================
+    public MensagemWhatsappSaidaDTO botoesComImagem(
+        String whatsappDestino,
+        String imageLink,
+        String imageId,
+        String corpo,
+        List<MensagemInterativaBotaoReplyWhatsappDTO> botoesReply
+    ) {
+
+        List<MensagemInterativaBotaoReplyWhatsappDTO> base = botoesReply == null ? List.of() : botoesReply;
+
+        List<MensagemInterativaBotaoWhatsappDTO> buttons = base.stream()
+            .filter(Objects::nonNull)
+            .map(
+                b -> MensagemInterativaBotaoWhatsappDTO.builder()
+                    .type("reply")
+                    .reply(b)
+                    .build()
+            )
+            .collect(Collectors.toList());
+
+        MensagemInterativaWhatsappDTO.MensagemInterativaWhatsappDTOBuilder interactiveBuilder =
+            MensagemInterativaWhatsappDTO.builder()
+                .type("button")
+                .body(
+                    MensagemInterativaCorpoWhatsappDTO.builder()
+                        .text(trunc(corpo, 1024))
+                        .build()
+                )
+                .action(
+                    MensagemInterativaAcaoBotoesWhatsappDTO.builder()
+                        .buttons(buttons)
+                        .build()
+                );
+
+        MensagemInterativaHeaderWhatsappDTO header = montarHeaderImagem(imageLink, imageId);
+
+        if (header != null) {
+            interactiveBuilder.header(header);
+        }
+
+        return MensagemWhatsappSaidaDTO.builder()
+            .messagingProduct("whatsapp")
+            .to(normalizarSomenteDigitos(whatsappDestino))
+            .type("interactive")
+            .interactive(interactiveBuilder.build())
+            .build();
+    }
+
+    private MensagemInterativaHeaderWhatsappDTO montarHeaderImagem(String imageLink, String imageId) {
+
+        if (!StringUtils.hasText(imageLink) && !StringUtils.hasText(imageId)) {
+            return null;
+        }
+
+        MensagemInterativaImagemWhatsappDTO.MensagemInterativaImagemWhatsappDTOBuilder imagemBuilder =
+            MensagemInterativaImagemWhatsappDTO.builder();
+
+        if (StringUtils.hasText(imageId)) {
+            imagemBuilder.id(safe(imageId));
+        } else {
+            imagemBuilder.link(safe(imageLink));
+        }
+
+        return MensagemInterativaHeaderWhatsappDTO.builder()
+            .type("image")
+            .image(imagemBuilder.build())
+            .build();
+    }
 
     public String formatarMoeda(BigDecimal v) {
         NumberFormat nf = NumberFormat.getCurrencyInstance(new Locale("pt", "BR"));
@@ -128,24 +246,42 @@ public class WhatsappMensagemFactory {
     }
 
     public String trunc(String s, int max) {
-        if (s == null) return "";
+        if (s == null) {
+            return "";
+        }
+
         String v = s.trim();
-        if (v.length() <= max) return v;
+        if (v.length() <= max) {
+            return v;
+        }
+
         return v.substring(0, max);
     }
 
     public String truncWord(String s, int max) {
-        if (s == null) return "";
+        if (s == null) {
+            return "";
+        }
+
         String v = s.trim();
-        if (v.length() <= max) return v;
+        if (v.length() <= max) {
+            return v;
+        }
+
         String cut = v.substring(0, max);
         int lastSpace = cut.lastIndexOf(' ');
-        if (lastSpace >= 10) return cut.substring(0, lastSpace);
+        if (lastSpace >= 10) {
+            return cut.substring(0, lastSpace);
+        }
+
         return cut;
     }
 
     public String normalizarSomenteDigitos(String whatsapp) {
-        if (!StringUtils.hasText(whatsapp)) return null;
+        if (!StringUtils.hasText(whatsapp)) {
+            return null;
+        }
+
         String d = whatsapp.replaceAll("\\D+", "").trim();
         return StringUtils.hasText(d) ? d : null;
     }

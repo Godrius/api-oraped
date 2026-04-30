@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/geolocalizacao/TaxaEntregaBairroService.java
 package br.com.oraped.service.geolocalizacao;
 
 import java.math.BigDecimal;
@@ -30,6 +29,11 @@ public class TaxaEntregaBairroService {
             .orElse(null);
     }
 
+    @Transactional(readOnly = true)
+    public TaxaEntregaBairro buscarConfiguracao(Long idEstabelecimento, Long idBairro) {
+        return repo.findByEstabelecimentoIdAndBairroId(idEstabelecimento, idBairro).orElse(null);
+    }
+
     @Transactional
     public BigDecimal salvarValor(
         Estabelecimento estabelecimento,
@@ -45,7 +49,7 @@ public class TaxaEntregaBairroService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idBairro é obrigatório");
         }
 
-        if (valor == null || valor.compareTo(BigDecimal.ZERO) < 0) {
+        if (valor == null || valor.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "valor inválido");
         }
 
@@ -60,9 +64,43 @@ public class TaxaEntregaBairroService {
                 return novo;
             });
 
+        // Sempre que houver taxa manual, o bairro deixa de ser isento.
         te.setValor(valor);
+        te.setIsento(false);
 
         return repo.save(te).getValor();
+    }
+
+    @Transactional
+    public void marcarIsento(
+        Estabelecimento estabelecimento,
+        Long idBairro
+    ) {
+
+        if (estabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "estabelecimento é obrigatório");
+        }
+
+        if (idBairro == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idBairro é obrigatório");
+        }
+
+        Bairro bairroRef = bairroService.buscar(idBairro);
+
+        TaxaEntregaBairro te = repo
+            .findByEstabelecimentoIdAndBairroId(estabelecimento.getId(), idBairro)
+            .orElseGet(() -> {
+                TaxaEntregaBairro novo = new TaxaEntregaBairro();
+                novo.setEstabelecimento(estabelecimento);
+                novo.setBairro(bairroRef);
+                return novo;
+            });
+
+        // Isenção explícita mantém registro para diferenciar de ausência de configuração.
+        te.setValor(BigDecimal.ZERO.setScale(2));
+        te.setIsento(true);
+
+        repo.save(te);
     }
 
     @Transactional

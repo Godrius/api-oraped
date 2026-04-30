@@ -12,26 +12,71 @@ import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.dto.whatsapp.entrada.MensagemWhatsappEntradaDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.service.EstabelecimentoService;
-import br.com.oraped.service.whatsapp.SessaoAtendimentoWhatsappService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
-import br.com.oraped.service.whatsapp.administrador.AdministradorWhatsappService;
+import br.com.oraped.service.whatsapp.administrador.AdminCardapioService;
+import br.com.oraped.service.whatsapp.administrador.AdminEntregaService;
+import br.com.oraped.service.whatsapp.administrador.AdminGrupoComplementoService;
+import br.com.oraped.service.whatsapp.administrador.AdminMarcaService;
+import br.com.oraped.service.whatsapp.administrador.AdminProdutoService;
+import br.com.oraped.service.whatsapp.administrador.MenuAdminService;
+import br.com.oraped.service.whatsapp.administrador.ValidadorAdminService;
+import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
+import br.com.oraped.service.whatsapp.orquestrador.marketplace.OrquestradorFluxoMarketplaceService;
+import br.com.oraped.service.whatsapp.sessao.SessaoAtendimentoWhatsappService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminComplementoService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminEntregaService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminGrupoComplementoService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminMarcaService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminProdutoService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappClienteService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappMarketplaceService;
 import lombok.RequiredArgsConstructor;
 
+/**
+ * Finalidade:
+ * Tratar mensagens de texto livre recebidas no WhatsApp, resolvendo estados pendentes
+ * da sessão antes de cair no menu padrão.
+ *
+ * Aplicação:
+ * Utilizado pelo orquestrador principal quando a entrada não é um comando estruturado,
+ * permitindo concluir fluxos do cliente, admin e marketplace por digitação livre.
+ *
+ * Utilização:
+ * Deve priorizar estados pendentes da sessão, pois o mesmo texto pode ter significados
+ * diferentes conforme o contexto atual da conversa.
+ */
 @Service
 @RequiredArgsConstructor
 public class OrquestradorTextoLivreService {
 
-    private final AdministradorWhatsappService administradorWhatsappService;
+    private final MenuAdminService menuAdminService;
+    private final AdminProdutoService adminProdutoService;
+    private final AdminEntregaService adminEntregaService;
+    private final AdminMarcaService adminMarcaService;
+    private final ValidadorAdminService validadorAdminService;
+    private final AdminGrupoComplementoService adminGrupoComplementoService;
+    private final AdminCardapioService adminCardapioService;
+    
     private final EstabelecimentoService estabelecimentoService;
 
     private final SessaoAtendimentoWhatsappService sessaoService;
-    private final OrquestradorRegistroMensagemService registroMensagemService;
+    private final SessaoWhatsappClienteService sessaoClienteService;
+    private final SessaoWhatsappMarketplaceService sessaoMarketplaceService;
+    private final SessaoWhatsappAdminProdutoService sessaoAdminProdutoService;
+    private final SessaoWhatsappAdminMarcaService sessaoAdminMarcaService;
+    private final SessaoWhatsappAdminEntregaService sessaoAdminEntregaService;
+    private final SessaoWhatsappAdminGrupoComplementoService sessaoAdminGrupoComplementoService;
+    private final SessaoWhatsappAdminComplementoService sessaoAdminComplementoService;
     
-    private final OrquestradorMenusClienteService menusClienteService;
+    private final OrquestradorRegistroMensagemService registroMensagemService;
+    private final OrquestradorRevisaoPedidoService revisaoPedidoService;
+    private final OrquestradorMenuClienteService menusClienteService;
     private final OrquestradorFluxoClienteService fluxoClienteService;
     private final OrquestradorParseService parse;
     private final OrquestradorMensagemHelperService mensagemHelper;
-    
+
+    private final OrquestradorFluxoMarketplaceService fluxoMarketplaceService;
+
     private final WhatsappMensagemFactory msg;
 
     public RoteamentoResultado tratarTextoLivre(
@@ -46,22 +91,21 @@ public class OrquestradorTextoLivreService {
 	    boolean temSaidaAnterior = ctx.isTemSaidaAnterior();
 
 	    if (idSessao == null) {
-	        MensagemWhatsappSaidaDTO m = msg.texto(whatsappCliente, "⚠️ Não consegui identificar sua sessão. Tente novamente.");
+	        MensagemWhatsappSaidaDTO m = msg.texto(
+	            whatsappCliente,
+	            "⚠️ Não consegui identificar sua sessão. Tente novamente."
+	        );
 	        return new RoteamentoResultado("sessao_invalida", m);
 	    }
 
-	    boolean isAdminAtivo = administradorWhatsappService.isAdminAtivo(estabelecimento, whatsappCliente);
+	    boolean isAdminAtivo = validadorAdminService.isAdminAtivo(estabelecimento, whatsappCliente);
 
 	    // =========================================================
-	    // 0) BLOQUEIO DE ATENDIMENTO (CLIENTE)
-	    // - admin ativo NUNCA é bloqueado
-	    // - inativo: apenas informa
-	    // - fechado: oferece botão "Sim, me avise"
+	    // 0) BLOQUEIO DE ATENDIMENTO PARA CLIENTE
 	    // =========================================================
 	    if (!isAdminAtivo) {
 
 	        if (estabelecimento != null && !estabelecimento.isAtivo()) {
-
 	            MensagemWhatsappSaidaDTO saida = msg.texto(
 	                whatsappCliente,
 	                "⚠️ Este estabelecimento está *inativo* no momento.\n\n" +
@@ -72,7 +116,6 @@ public class OrquestradorTextoLivreService {
 	        }
 
 	        if (estabelecimento != null && !estabelecimento.isAberto()) {
-
 	            String corpo =
 	                "⏸️ No momento o estabelecimento está *fechado*.\n\n" +
 	                    "Quer que eu te avise quando abrir?";
@@ -81,7 +124,7 @@ public class OrquestradorTextoLivreService {
 	                whatsappCliente,
 	                msg.trunc(corpo, 1024),
 	                List.of(
-	                	mensagemHelper.btn("COMANDO|CADASTRAR_NOTIFICACAO_ESTABELECIMENTO_ABERTO", "Sim, me avise")
+	                    mensagemHelper.btn("COMANDO|CADASTRAR_NOTIFICACAO_ESTABELECIMENTO_ABERTO", "Sim, me avise")
 	                )
 	            );
 
@@ -90,37 +133,146 @@ public class OrquestradorTextoLivreService {
 	    }
 
 	    // =========================================================
-	    // Comando "MENU" (atalho)
+	    // 1) ATALHO GLOBAL: MENU
 	    // =========================================================
 	    String txtLivre = msg.safe(parse.safeTextoEntrada(req));
-	    if (StringUtils.hasText(txtLivre)) {
 
+	    if (StringUtils.hasText(txtLivre)) {
 	        String upper = txtLivre.trim().toUpperCase(Locale.ROOT);
 
-            if ("MENU".equals(upper)) {
+	        if ("MENU".equals(upper)) {
+	            sessaoService.limparAguardando(idSessao);
 
-                sessaoService.limparAguardando(idSessao);
+	            if (isAdminAtivo) {
+	                limparEstadosAdmin(idSessao);
+	            }
 
-                MensagemWhatsappSaidaDTO mensagemSaida = temSaidaAnterior
-                    ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
-                    : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
+	            MensagemWhatsappSaidaDTO mensagemSaida = temSaidaAnterior
+	                ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente, idSessao)
+	                : menusClienteService.montarMenuPrincipal(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    ctx.getNomeClienteWhatsapp()
+	                );
 
-                return new RoteamentoResultado("menu_principal", mensagemSaida);
-            }
+	            return new RoteamentoResultado("menu_principal", mensagemSaida);
+	        }
 	    }
 
 	    // =========================================================
-	    // 0) Admin aguardando digitação (prioridade máxima)
+	    // 2) MARKETPLACE: REFINAMENTO DE LOCALIZAÇÃO POR CEP
+	    // =========================================================
+	    if (sessaoMarketplaceService.isAguardandoCepRefinarMarketplace(idSessao)) {
+	        return fluxoMarketplaceService.tratarRefinamentoLocalizacaoPorCep(
+	            whatsappCliente,
+	            idSessao,
+	            parse.safeTextoEntrada(req)
+	        );
+	    }
+
+	    // =========================================================
+	    // 3) ADMIN: ESTADOS PENDENTES POR DIGITAÇÃO
 	    // =========================================================
 	    if (isAdminAtivo) {
 
-	        if (sessaoService.isAguardandoNovoPreco(idSessao)) {
-	            var r = administradorWhatsappService.concluirPrecoManualProdutoPorDigitacao(
+	        // -----------------------------------------------------
+	        // 3.1) ADMIN: GRUPOS DE COMPLEMENTOS
+	        // -----------------------------------------------------
+	        if (sessaoAdminGrupoComplementoService.isAguardandoNovoGrupo(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminGrupoComplementoService.concluirCadastroGrupoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        if (sessaoAdminGrupoComplementoService.isAguardandoEditarNomeGrupo(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminGrupoComplementoService.concluirAlteracaoNomeGrupoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        if (sessaoAdminGrupoComplementoService.isAguardandoEditarDescricaoGrupo(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminGrupoComplementoService.concluirAlteracaoDescricaoGrupoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
+	        if (sessaoAdminGrupoComplementoService.isAguardandoNovoComplemento(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminGrupoComplementoService.concluirCadastroComplementoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        if (sessaoAdminComplementoService.isAguardandoNovoPrecoComplemento(idSessao)) {
+	            var r = adminGrupoComplementoService.concluirPrecoManualComplementoGlobalPorDigitacao(
 	                estabelecimento,
 	                whatsappCliente,
 	                idSessao,
 	                parse.safeTextoEntrada(req)
 	            );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
+	        
+	        // -----------------------------------------------------
+	        // 3.2) ADMIN: PRODUTO
+	        // -----------------------------------------------------
+	        if (sessaoAdminProdutoService.isAguardandoNovaFotoProduto(idSessao)) {
+
+	            if (!req.isMensagemImagem()) {
+	                MensagemWhatsappSaidaDTO m = msg.texto(
+	                    whatsappCliente,
+	                    "🖼️ Estou aguardando a *foto do produto*.\n\n" +
+	                        "Envie uma imagem nesta conversa.\n\n" +
+	                        "Se quiser cancelar, envie *MENU*."
+	                );
+	                return new RoteamentoResultado("admin_prod_foto_esperando_imagem", m);
+	            }
+
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminProdutoService.concluirAlteracaoFotoProdutoPorImagem(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    req.getIdMidia(),
+	                    req.getMimeTypeMidia()
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        if (sessaoAdminProdutoService.isAguardandoNovoPreco(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdminPreco r =
+	                adminProdutoService.concluirPrecoManualProdutoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
 
 	            String corpoConfirmacao =
 	                "✅ Preço atualizado!\n\n" +
@@ -128,107 +280,141 @@ public class OrquestradorTextoLivreService {
 	                    msg.trunc(msg.safe(r.descricaoProduto), 500) + "\n\n" +
 	                    "*Novo preço:* " + msg.formatarMoeda(r.novoPreco);
 
-	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(whatsappCliente, msg.trunc(corpoConfirmacao, 1024));
+	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(
+	                whatsappCliente,
+	                msg.trunc(corpoConfirmacao, 1024)
+	            );
+
 	            List<MensagemWhatsappSaidaDTO> extras = List.of(r.admin.mensagem);
 
 	            return new RoteamentoResultado("admin_preco_atualizado_digitacao", confirmacao, extras);
 	        }
 
-	        if (sessaoService.isAguardandoNovoNomeProduto(idSessao)) {
-	            var r = administradorWhatsappService.concluirAlteracaoNomeProdutoPorDigitacao(
-	                estabelecimento,
-	                whatsappCliente,
-	                idSessao,
-	                parse.safeTextoEntrada(req)
-	            );
+	        if (sessaoAdminProdutoService.isAguardandoNovoNomeProduto(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminProdutoService.concluirAlteracaoNomeProdutoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
-	        if (sessaoService.isAguardandoNovaDescricaoProduto(idSessao)) {
-	            var r = administradorWhatsappService.concluirAlteracaoDescricaoProdutoPorDigitacao(
-	                estabelecimento,
-	                whatsappCliente,
-	                idSessao,
-	                parse.safeTextoEntrada(req)
-	            );
+	        if (sessaoAdminProdutoService.isAguardandoNovaDescricaoProduto(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminProdutoService.concluirAlteracaoDescricaoProdutoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
-	        if (sessaoService.isAguardandoNovaMarca(idSessao)) {
-	            var r = administradorWhatsappService.concluirCadastroMarcaPorDigitacao(
-	                estabelecimento,
-	                whatsappCliente,
-	                idSessao,
-	                parse.safeTextoEntrada(req)
-	            );
+	        // -----------------------------------------------------
+	        // 3.3) ADMIN: MARCAS
+	        // -----------------------------------------------------
+	        if (sessaoAdminMarcaService.isAguardandoNovaMarca(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdminMarca r =
+	                adminMarcaService.concluirCadastroMarcaPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
 
 	            String corpoConfirmacao =
 	                "✅ Marca cadastrada!\n\n" +
 	                    "*" + msg.trunc(msg.safe(r.nomeMarca), 120) + "*";
 
-	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(whatsappCliente, msg.trunc(corpoConfirmacao, 1024));
+	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(
+	                whatsappCliente,
+	                msg.trunc(corpoConfirmacao, 1024)
+	            );
+
 	            List<MensagemWhatsappSaidaDTO> extras = List.of(r.admin.mensagem);
 
 	            return new RoteamentoResultado("admin_marca_criada_digitacao", confirmacao, extras);
 	        }
 
-	        if (sessaoService.isAguardandoEditarMarcaNome(idSessao)) {
-	            var r = administradorWhatsappService.concluirAlteracaoNomeMarcaPorDigitacao(
-	                estabelecimento,
-	                whatsappCliente,
-	                idSessao,
-	                parse.safeTextoEntrada(req)
-	            );
+	        if (sessaoAdminMarcaService.isAguardandoEditarMarcaNome(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdminMarca r =
+	                adminMarcaService.concluirAlteracaoNomeMarcaPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
 
 	            String corpoConfirmacao =
 	                "✅ Nome da marca atualizado!\n\n" +
 	                    "*" + msg.trunc(msg.safe(r.nomeMarca), 120) + "*";
 
-	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(whatsappCliente, msg.trunc(corpoConfirmacao, 1024));
+	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(
+	                whatsappCliente,
+	                msg.trunc(corpoConfirmacao, 1024)
+	            );
+
 	            List<MensagemWhatsappSaidaDTO> extras = List.of(r.admin.mensagem);
 
 	            return new RoteamentoResultado("admin_marca_nome_atualizado_digitacao", confirmacao, extras);
 	        }
 
-	        if (sessaoService.isAguardandoCepEstabelecimento(idSessao)) {
+	        // -----------------------------------------------------
+	        // 3.4) ADMIN: ENTREGAS
+	        // -----------------------------------------------------
+	        if (sessaoAdminEntregaService.isAguardandoCepEstabelecimento(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminEntregaService.concluirCadastroCepLojaPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
 
-	            var r = administradorWhatsappService.concluirCadastroCepLojaPorDigitacao(
-	                estabelecimento,
-	                whatsappCliente,
-	                idSessao,
-	                parse.safeTextoEntrada(req)
-	            );
-
-	            boolean salvouCep = r != null && r.chave != null && r.chave.startsWith("admin_entregas_cep_salvo");
+	            boolean salvouCep = r != null
+	                && r.chave != null
+	                && r.chave.startsWith("admin_entregas_cep_salvo");
 
 	            if (!salvouCep) {
 	                return new RoteamentoResultado(r.chave, r.mensagem);
 	            }
 
 	            Estabelecimento atualizado = estabelecimentoService.buscarPorWhatsapp(whatsappReceptor);
+
 	            MensagemWhatsappSaidaDTO menuEntregas =
-	                administradorWhatsappService.montarMenuEntregas(atualizado, whatsappCliente).mensagem;
+	                menuAdminService.montarMenuEntregas(atualizado, whatsappCliente).mensagem;
 
 	            return new RoteamentoResultado(r.chave, r.mensagem, List.of(menuEntregas));
 	        }
 
-	        if (sessaoService.isAguardandoTaxaEntregaBairro(idSessao)) {
+	        if (sessaoAdminEntregaService.isAguardandoTaxaEntregaBairro(idSessao)) {
+	            Integer offsetLista = sessaoAdminEntregaService.getOffsetListaTaxaEntregaBairro(idSessao);
 
-	            AdministradorWhatsappService.ResultadoAdmin r =
-	                administradorWhatsappService.concluirCadastroTaxaEntregaBairroPorDigitacao(
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminEntregaService.concluirCadastroTaxaEntregaBairroPorDigitacao(
 	                    estabelecimento,
 	                    whatsappCliente,
 	                    idSessao,
 	                    parse.safeTextoEntrada(req)
 	                );
 
-	            return new RoteamentoResultado(r.chave, r.mensagem);
+	            MensagemWhatsappSaidaDTO menuBairros =
+	                adminEntregaService.montarMenuTaxaPorBairros(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    offsetLista
+	                ).mensagem;
+
+	            return new RoteamentoResultado(r.chave, r.mensagem, List.of(menuBairros));
 	        }
 
-	        if (sessaoService.isAguardandoTaxaEntregaPadrao(idSessao)) {
-
-	            AdministradorWhatsappService.ResultadoAdmin r =
-	                administradorWhatsappService.concluirCadastroTaxaEntregaPadraoPorDigitacao(
+	        if (sessaoAdminEntregaService.isAguardandoTaxaEntregaPadrao(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminEntregaService.concluirCadastroTaxaEntregaPadraoPorDigitacao(
 	                    estabelecimento,
 	                    whatsappCliente,
 	                    idSessao,
@@ -238,170 +424,225 @@ public class OrquestradorTextoLivreService {
 	            Estabelecimento atualizado = estabelecimentoService.buscarPorWhatsapp(whatsappReceptor);
 
 	            MensagemWhatsappSaidaDTO menuEntregas =
-	                administradorWhatsappService.montarMenuEntregas(atualizado, whatsappCliente).mensagem;
+	                menuAdminService.montarMenuEntregas(atualizado, whatsappCliente).mensagem;
 
 	            return new RoteamentoResultado(r.chave, r.mensagem, List.of(menuEntregas));
 	        }
+
+	        if (sessaoAdminEntregaService.isAguardandoBairrosAtendidos(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminEntregaService.concluirConfiguracaoBairrosAtendidosPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            MensagemWhatsappSaidaDTO listaAtualizada =
+	                adminEntregaService.iniciarConfiguracaoBairrosAtendidosPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao
+	                ).mensagem;
+
+	            MensagemWhatsappSaidaDTO navegacao = msg.botoes(
+	                whatsappCliente,
+	                "Digite os códigos dos bairros atendidos ou use os botões abaixo para voltar ao menu de opções",
+	                List.of(
+	                    mensagemHelper.btn("COMANDO|ADMIN_ENTREGAS_MENU", "⬅️ Voltar"),
+	                    mensagemHelper.btn("COMANDO|ADMIN_MENU", "🛠️ Menu admin")
+	                )
+	            );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem, List.of(listaAtualizada, navegacao));
+	        }
+	        
+	        
+	        // -----------------------------------------------------
+	        // 3.5) ADMIN: CATEGORIAS E PRODUTOS
+	        // -----------------------------------------------------
+	        if (sessaoAdminProdutoService.isAguardandoNovaCategoria(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminCardapioService.concluirCadastroCategoriaPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+
+	        if (sessaoAdminProdutoService.isAguardandoNovoProduto(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminProdutoService.concluirCadastroProdutoPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 	    }
 
-	    // FAILSAFE: limpa estados admin remanescentes para não-admin
+	    // =========================================================
+	    // 4) FAILSAFE: LIMPA ESTADOS ADMIN PARA NÃO-ADMIN
+	    // =========================================================
 	    if (!isAdminAtivo) {
-	        if (sessaoService.isAguardandoTaxaEntregaPadrao(idSessao)) {
-	            sessaoService.limparAguardandoTaxaEntregaPadrao(idSessao);
-	        }
-	        if (sessaoService.isAguardandoTaxaEntregaBairro(idSessao)) {
-	            sessaoService.limparAguardandoTaxaEntregaBairro(idSessao);
-	        }
-	        if (sessaoService.isAguardandoCepEstabelecimento(idSessao)) {
-	            sessaoService.limparAguardandoCepEstabelecimento(idSessao);
-	        }
+	        limparEstadosAdmin(idSessao);
 	    }
 
-	    // Fluxos do cliente
-        
-	 // =========================================================
-	 // CLIENTE: Quantidade manual (digitação)
-	 // =========================================================
-	 if (sessaoService.isAguardandoQuantidadeManual(idSessao)) {
+		 // =========================================================
+		 // 5) CLIENTE: QUANTIDADE MANUAL
+		 // =========================================================
+		 if (sessaoClienteService.isAguardandoQuantidadeManual(idSessao)) {
+		     String raw = msg.safe(parse.safeTextoEntrada(req));
+	
+		     Integer quantidade = extrairQuantidadeInteira(raw);
+	
+		     if (quantidade == null || quantidade.intValue() <= 0) {
+		         MensagemWhatsappSaidaDTO m = msg.texto(
+		             whatsappCliente,
+		             "Quantidade inválida 😕\n\n" +
+		                 "Me informe um número inteiro maior que zero.\n\n" +
+		                 "Exemplo: 15"
+		         );
+	
+		         return new RoteamentoResultado("quantidade_manual_invalida", m);
+		     }
+	
+		     Long idProduto = sessaoClienteService.getIdProdutoQuantidadeManual(idSessao);
+	
+		     if (idProduto == null) {
+		         sessaoService.limparAguardando(idSessao);
+	
+		         MensagemWhatsappSaidaDTO fallback = temSaidaAnterior
+		             ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente, idSessao)
+		             : menusClienteService.montarMenuPrincipal(
+		                 estabelecimento,
+		                 whatsappCliente,
+		                 ctx.getNomeClienteWhatsapp()
+		             );
+	
+		         return new RoteamentoResultado("quantidade_manual_sem_produto", fallback);
+		     }
+	
+		     // A digitação manual reaproveita o mesmo fluxo de adição usado pelos botões de quantidade.
+		     String comandoAdicionar = "COMANDO|ADICIONAR_PRODUTO|" + idProduto + "|" + quantidade;
+		     registroMensagemService.registrarEntrada(idSessao, comandoAdicionar, null);
+	
+		     sessaoClienteService.limparAguardandoQuantidadeManual(idSessao);
+	
+		     return fluxoClienteService.tratarAdicionarProduto(
+		         estabelecimento,
+		         whatsappCliente,
+		         idSessao,
+		         idProduto,
+		         quantidade
+		     );
+		 }
 
-	     String raw = msg.safe(parse.safeTextoEntrada(req));
+	    // =========================================================
+	    // 6) CLIENTE: ENTREGA E PAGAMENTO
+	    // =========================================================
+	    if (sessaoClienteService.isAguardandoEnderecoEntrega(idSessao)) {
+	        MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarEnderecoEntregaInformado(
+	            estabelecimento,
+	            whatsappCliente,
+	            idSessao,
+	            parse.safeTextoEntrada(req)
+	        );
 
-	     Integer quantidade = extrairQuantidadeInteira(raw);
+	        return new RoteamentoResultado("endereco_entrega_tratado", m);
+	    }
 
-	     if (quantidade == null || quantidade.intValue() <= 0) {
-
-	         // Mantém aguardando quantidade manual
-	         MensagemWhatsappSaidaDTO m = msg.texto(
-	             whatsappCliente,
-	             "Quantidade inválida 😕\n\n" +
-	                 "Me informe um número inteiro maior que zero.\n\n" +
-	                 "Exemplo: 15"
-	         );
-
-	         return new RoteamentoResultado("quantidade_manual_invalida", m);
-	     }
-
-	     Long idProduto = sessaoService.getIdProdutoQuantidadeManual(idSessao);
-
-	     if (idProduto == null) {
-
-	         // Segurança: se perdeu o contexto, limpa e volta menu
-	         sessaoService.limparAguardando(idSessao);
-
-	         MensagemWhatsappSaidaDTO fallback = temSaidaAnterior
-	             ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
-	             : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
-
-	         return new RoteamentoResultado("quantidade_manual_sem_produto", fallback);
-	     }
-
-	     // ----------------------------------------------------------------
-	     // IMPORTANTE:
-	     // O carrinho é montado a partir de entradas "COMANDO|ADICIONAR_PRODUTO|..."
-	     // Como aqui o cliente digitou "100" (texto livre), precisamos gravar
-	     // uma entrada sintética equivalente ao comando de adicionar produto.
-	     // ----------------------------------------------------------------
-	     String comandoAdicionar = "COMANDO|ADICIONAR_PRODUTO|" + idProduto + "|" + quantidade;
-
-	     // "payloadOriginal" aqui não existe (é uma entrada sintética), então vai null.
-	     registroMensagemService.registrarEntrada(idSessao, comandoAdicionar, null);
-
-	     // Agora sim: limpa o modo de digitação para não deixar estado preso
-	     sessaoService.limparAguardando(idSessao);
-
-	     // Reutiliza o fluxo já existente (monta mensagem + botões)
-	     return fluxoClienteService.tratarAdicionarProduto(
-	         estabelecimento,
-	         whatsappCliente,
-	         idProduto,
-	         quantidade
-	     );
-	 }
-        
-        // =========================================================
-        // CLIENTE: Endereço de entrega (digitação)
-        // =========================================================
-        if (sessaoService.isAguardandoEnderecoEntrega(idSessao)) {
-
-            MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarEnderecoEntregaInformado(
-                estabelecimento,
-                whatsappCliente,
-                idSessao,
-                parse.safeTextoEntrada(req)
-            );
-
-            return new RoteamentoResultado("endereco_entrega_tratado", m);
-        }
-	    
-	    if (sessaoService.isAguardandoCepEntrega(idSessao)) {
+	    if (sessaoClienteService.isAguardandoCepEntrega(idSessao)) {
 	        MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarCepEntregaInformado(
 	            estabelecimento,
 	            whatsappCliente,
 	            idSessao,
 	            parse.safeTextoEntrada(req)
 	        );
+
 	        return new RoteamentoResultado("cep_entrega_tratado", m);
 	    }
 
-	    if (sessaoService.isAguardandoComplementoEndereco(idSessao)) {
+	    if (sessaoClienteService.isAguardandoComplementoEndereco(idSessao)) {
 	        MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarComplementoEnderecoInformado(
 	            estabelecimento,
 	            whatsappCliente,
 	            idSessao,
 	            parse.safeTextoEntrada(req)
 	        );
+
 	        return new RoteamentoResultado("complemento_endereco_tratado", m);
 	    }
 
-	    if (sessaoService.isAguardandoEnderecoCompletoFallback(idSessao)) {
+	    if (sessaoClienteService.isAguardandoEnderecoCompletoFallback(idSessao)) {
 	        MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarEnderecoCompletoFallbackInformado(
 	            estabelecimento,
 	            whatsappCliente,
 	            idSessao,
 	            parse.safeTextoEntrada(req)
 	        );
+
 	        return new RoteamentoResultado("endereco_fallback_tratado", m);
 	    }
 
-	    if (sessaoService.isAguardandoFormaPagamento(idSessao)) {
-	    	MensagemWhatsappSaidaDTO m = menusClienteService.montarEscolhaFormaPagamento(estabelecimento, whatsappCliente, idSessao);
+	    if (sessaoClienteService.isAguardandoFormaPagamento(idSessao)) {
+	        MensagemWhatsappSaidaDTO m = menusClienteService.montarEscolhaFormaPagamento(
+	            estabelecimento,
+	            whatsappCliente,
+	            idSessao
+	        );
+
 	        return new RoteamentoResultado("forma_pagamento_menu", m);
 	    }
 
-	    if (sessaoService.isAguardandoTrocoConfirmacao(idSessao)) {
+	    if (sessaoClienteService.isAguardandoTrocoConfirmacao(idSessao)) {
 	        MensagemWhatsappSaidaDTO m = menusClienteService.montarPerguntaTrocoSimNao(whatsappCliente);
+
 	        return new RoteamentoResultado("troco_confirmacao_menu", m);
 	    }
 
-	    if (sessaoService.isAguardandoTrocoValor(idSessao)) {
+	    if (sessaoClienteService.isAguardandoTrocoValor(idSessao)) {
 	        MensagemWhatsappSaidaDTO m = fluxoClienteService.tratarValorTrocoInformado(
 	            estabelecimento,
 	            whatsappCliente,
 	            idSessao,
 	            parse.safeTextoEntrada(req)
 	        );
+
 	        return new RoteamentoResultado("troco_valor_registrado", m);
 	    }
 
-	    if (sessaoService.isAguardandoConfirmacaoFinal(idSessao)) {
+	    if (sessaoClienteService.isAguardandoConfirmacaoFinal(idSessao)) {
 	        var s = sessaoService.buscarPorId(idSessao);
-	        MensagemWhatsappSaidaDTO m = menusClienteService.montarConfirmacaoFinalAntesDeEnviar(
+
+	        MensagemWhatsappSaidaDTO m = revisaoPedidoService.montarConfirmacaoFinalAntesDeEnviar(
 	            estabelecimento,
 	            whatsappCliente,
 	            s
 	        );
+
 	        return new RoteamentoResultado("confirmacao_final", m);
 	    }
 
-	    // Fallback menu
+	    // =========================================================
+	    // 7) FALLBACK: MENU PRINCIPAL DO CLIENTE
+	    // =========================================================
 	    MensagemWhatsappSaidaDTO fallback = temSaidaAnterior
-	        ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente)
-	        : menusClienteService.montarMenuPrincipal(estabelecimento, whatsappCliente);
+	        ? menusClienteService.montarMenuPrincipalSemSaudacao(estabelecimento, whatsappCliente, idSessao)
+	        : menusClienteService.montarMenuPrincipal(
+	            estabelecimento,
+	            whatsappCliente,
+	            ctx.getNomeClienteWhatsapp()
+	        );
 
 	    return new RoteamentoResultado("menu_principal", fallback);
 	}
-    
-    
+
     private Integer extrairQuantidadeInteira(String raw) {
 
         if (!StringUtils.hasText(raw)) {
@@ -423,5 +664,24 @@ public class OrquestradorTextoLivreService {
         } catch (Exception e) {
             return null;
         }
+    }
+    
+    
+    private void limparEstadosAdmin(Long idSessao) {
+
+        sessaoAdminGrupoComplementoService.limparEstadosGrupo(idSessao);
+
+        sessaoAdminProdutoService.limparAguardandoNovoPreco(idSessao);
+        sessaoAdminProdutoService.limparAguardandoNovoNomeProduto(idSessao);
+        sessaoAdminProdutoService.limparAguardandoNovaDescricaoProduto(idSessao);
+        sessaoAdminProdutoService.limparAguardandoNovaFotoProduto(idSessao);
+        sessaoAdminProdutoService.limparAguardandoNovaCategoria(idSessao);
+        sessaoAdminProdutoService.limparAguardandoNovoProduto(idSessao);
+
+        sessaoAdminComplementoService.limparAguardandoNovoPrecoComplemento(idSessao);
+
+        sessaoAdminEntregaService.limparAguardandoCepEstabelecimento(idSessao);
+        sessaoAdminEntregaService.limparAguardandoTaxaEntregaBairro(idSessao);
+        sessaoAdminEntregaService.limparAguardandoTaxaEntregaPadrao(idSessao);
     }
 }

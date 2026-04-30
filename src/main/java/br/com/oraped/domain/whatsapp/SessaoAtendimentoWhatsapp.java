@@ -45,9 +45,24 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "whatsapp_receptor", nullable = false, length = 30)
     private String whatsappReceptor;
 
-    @Column(name = "id_estabelecimento", nullable = false)
+    @Column(name = "id_estabelecimento")
     private Long idEstabelecimento;
 
+    @Column(name = "id_marketplace")
+    private Long idMarketplace;
+    
+    @Column(name = "id_categoria_marketplace")
+    private Long idCategoriaMarketplace;
+
+    @Column(name = "id_subcategoria_marketplace")
+    private Long idSubcategoriaMarketplace;
+
+    @Column(name = "latitude_origem_cliente")
+    private Double latitudeOrigemCliente;
+
+    @Column(name = "longitude_origem_cliente")
+    private Double longitudeOrigemCliente;
+    
     @Column(name = "ultima_interacao_em", nullable = false)
     private OffsetDateTime ultimaInteracaoEm;
 
@@ -128,6 +143,9 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_novo_preco")
     private Integer offsetListaNovoPreco;
 
+    @Column(name = "id_categoria_novo_preco")
+    private Long idCategoriaNovoPreco;
+    
     // =========================================================
     // ADMIN — Produto (Nome por digitação)
     // =========================================================
@@ -141,6 +159,9 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_novo_nome")
     private Integer offsetListaNovoNome;
 
+    @Column(name = "id_categoria_novo_nome")
+    private Long idCategoriaNovoNome;
+    
     // =========================================================
     // ADMIN — Produto (Descrição por digitação)
     // =========================================================
@@ -154,6 +175,50 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_nova_descricao")
     private Integer offsetListaNovaDescricao;
 
+    @Column(name = "id_categoria_nova_descricao")
+    private Long idCategoriaNovaDescricao;
+    
+    // =========================================================
+    // ADMIN — Produto (Foto por envio de imagem)
+    // =========================================================
+
+    @Column(name = "aguardando_nova_foto_produto", nullable = false)
+    private Boolean aguardandoNovaFotoProduto;
+
+    @Column(name = "id_produto_nova_foto")
+    private Long idProdutoNovaFoto;
+
+    @Column(name = "offset_lista_nova_foto")
+    private Integer offsetListaNovaFoto;
+    
+    @Column(name = "id_categoria_nova_foto")
+    private Long idCategoriaNovaFoto;
+    
+    
+    // =========================================================
+    // ADMIN — Categoria de produto (Criar por digitação)
+    // =========================================================
+
+    @Column(name = "aguardando_nova_categoria_produto", nullable = false)
+    private Boolean aguardandoNovaCategoria = false;
+
+    @Column(name = "offset_lista_nova_categoria")
+    private Integer offsetListaNovaCategoria = 0;
+
+    // =========================================================
+    // ADMIN — Produto (Criar por digitação)
+    // =========================================================
+
+    @Column(name = "aguardando_novo_produto", nullable = false)
+    private Boolean aguardandoNovoProduto = false;
+
+    @Column(name = "id_categoria_novo_produto")
+    private Long idCategoriaNovoProduto;
+
+    @Column(name = "offset_lista_novo_produto")
+    private Integer offsetListaNovoProduto = 0;
+    
+    
     // =========================================================
     // ADMIN — Marca (Criar por digitação)
     // =========================================================
@@ -205,6 +270,109 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_taxa_padrao_voltar")
     private Integer offsetListaTaxaPadraoVoltar;
 
+    
+	// =========================================================
+	// ADMIN — Bairros atendidos por digitação
+	// =========================================================
+
+    @Column(name = "aguardando_bairros_atendidos", nullable = false)
+    private Boolean aguardandoBairrosAtendidos;
+    
+	 // =========================================================
+	 // ADMIN — Grupo de complementos (Criar por digitação)
+	 // =========================================================
+	
+	 @Column(name = "aguardando_novo_grupo_complemento", nullable = false)
+	 private boolean aguardandoNovoGrupoComplemento = false;
+	
+	 @Column(name = "offset_novo_grupo_complemento")
+	 private Integer offsetNovoGrupoComplemento = 0;
+	
+	 // =========================================================
+	 // ADMIN — Grupo de complementos (Editar nome por digitação)
+	 // =========================================================
+	
+	 @Column(name = "aguardando_editar_nome_grupo_complemento", nullable = false)
+	 private boolean aguardandoEditarNomeGrupoComplemento = false;
+	
+	 @Column(name = "id_grupo_complemento_editar_nome")
+	 private Long idGrupoComplementoEditarNome;
+	
+	 @Column(name = "offset_editar_nome_grupo_complemento")
+	 private Integer offsetEditarNomeGrupoComplemento = 0;
+	
+	 // =========================================================
+	 // ADMIN — Grupo de complementos (Editar descrição por digitação)
+	 // =========================================================
+	
+	 @Column(name = "aguardando_editar_descricao_grupo_complemento", nullable = false)
+	 private boolean aguardandoEditarDescricaoGrupoComplemento = false;
+	
+	 @Column(name = "id_grupo_complemento_editar_descricao")
+	 private Long idGrupoComplementoEditarDescricao;
+	
+	 @Column(name = "offset_editar_descricao_grupo_complemento")
+	 private Integer offsetEditarDescricaoGrupoComplemento = 0;
+	 
+	// =========================================================
+	// ADMIN — Complemento de grupo (Criar por digitação)
+	// =========================================================
+
+	@Column(name = "aguardando_novo_complemento_grupo", nullable = false)
+	private boolean aguardandoNovoComplementoGrupo = false;
+
+	@Column(name = "id_grupo_novo_complemento")
+	private Long idGrupoNovoComplemento;
+
+	@Column(name = "offset_novo_complemento_grupo")
+	private Integer offsetNovoComplementoGrupo = 0;
+	
+    // =========================================================
+    // ADMIN — Preços dos complementos
+    // =========================================================
+    		
+    /**
+     * Controle temporário para alteração de preço de complemento pelo admin.
+     *
+     * Aplicação:
+     * - usado quando o admin escolhe "Outro valor" no menu do complemento
+     * - preserva o contexto necessário para retornar ao grupo/produto após a digitação
+     */
+    
+    @Column(name = "aguardando_novo_preco_complemento", nullable = false)
+    private boolean aguardandoNovoPrecoComplemento = false;
+
+    @Column(name = "id_produto_novo_preco_complemento")
+    private Long idProdutoNovoPrecoComplemento;
+
+    @Column(name = "id_categoria_novo_preco_complemento")
+    private Long idCategoriaNovoPrecoComplemento;
+
+    @Column(name = "id_grupo_novo_preco_complemento")
+    private Long idGrupoNovoPrecoComplemento;
+
+    @Column(name = "id_complemento_novo_preco")
+    private Long idComplementoNovoPreco;
+
+    @Column(name = "offset_lista_produto_novo_preco_complemento")
+    private Integer offsetListaProdutoNovoPrecoComplemento = 0;
+    
+    // =========================================================
+    // CLIENTE — Carrinho em montagem
+    // =========================================================
+    @Column(name = "id_produto_item_em_montagem")
+    private Long idProdutoItemEmMontagem;
+
+    @Column(name = "id_categoria_item_em_montagem")
+    private Long idCategoriaItemEmMontagem;
+
+    @Column(name = "quantidade_multipla_item_em_montagem")
+    private Integer quantidadeMultiplaItemEmMontagem;
+
+    @Column(name = "ordem_grupo_complemento_item_em_montagem")
+    private Integer ordemGrupoComplementoItemEmMontagem;
+    
+    
     @PrePersist
     public void prePersist() {
 
@@ -224,6 +392,10 @@ public class SessaoAtendimentoWhatsapp {
             aguardandoNovaDescricaoProduto = false;
         }
 
+        if (aguardandoNovaFotoProduto == null) {
+            aguardandoNovaFotoProduto = false;
+        }
+        
         if (aguardandoNovaMarca == null) {
             aguardandoNovaMarca = false;
         }
@@ -243,6 +415,11 @@ public class SessaoAtendimentoWhatsapp {
         if (aguardandoQuantidadeManual == null) {
             aguardandoQuantidadeManual = false;
         }
+        
+        if (aguardandoBairrosAtendidos == null) {
+            aguardandoBairrosAtendidos = false;
+        }
+        
     }
 
     @PreUpdate

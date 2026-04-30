@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/whatsapp/orquestrador/OrquestradorMensagemHelperService.java
 package br.com.oraped.service.whatsapp.orquestrador;
 
 import org.springframework.stereotype.Service;
@@ -28,4 +27,6 @@ public class OrquestradorMensagemHelperService {
             .description(msg.trunc(msg.safe(description), 72))
             .build();
     }
+
+    
 }

@@ -15,6 +15,7 @@ public class OrquestradorContextoService {
         String whatsappCliente,
         String whatsappReceptor,
         String phoneNumberId,
+        String nomeClienteWhatsapp,
         boolean temSaidaAnterior
     ) {
         return new OrquestradorContexto(
@@ -23,6 +24,7 @@ public class OrquestradorContextoService {
             whatsappCliente,
             whatsappReceptor,
             phoneNumberId,
+            nomeClienteWhatsapp,
             temSaidaAnterior
         );
     }

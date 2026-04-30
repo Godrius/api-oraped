@@ -7,25 +7,26 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 
 import br.com.oraped.domain.Cliente;
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.ItemPedido;
 import br.com.oraped.domain.ItemPedidoOpcional;
 import br.com.oraped.domain.Pedido;
-import br.com.oraped.domain.Produto;
 import br.com.oraped.domain.enums.StatusPedido;
+import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.dto.ItemPedidoOpcionalRequestDTO;
 import br.com.oraped.dto.ItemPedidoRequestDTO;
 import br.com.oraped.dto.PedidoRequestDTO;
 import br.com.oraped.dto.PedidoResponseDTO;
 import br.com.oraped.repository.PedidoRepository;
+import br.com.oraped.service.produto.ProdutoService;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -699,26 +700,46 @@ public class PedidoService {
 
         StringBuilder sb = new StringBuilder();
 
-        for (ItemPedido it : pedido.getItens()) {
-            if (it == null) continue;
+        for (ItemPedido item : pedido.getItens()) {
 
-            String nome = "(produto)";
-            if (it.getProduto() != null && it.getProduto().getNome() != null) {
-                nome = it.getProduto().getNome();
+            if (item == null) {
+                continue;
             }
 
-            int qtd = it.getQuantidade() == null ? 0 : it.getQuantidade();
+            String nome = "(produto)";
+            if (item.getProduto() != null && item.getProduto().getNome() != null) {
+                nome = item.getProduto().getNome();
+            }
+
+            int quantidade = item.getQuantidade() == null ? 0 : item.getQuantidade();
 
             sb.append("- ")
                 .append(nome)
                 .append(" x")
-                .append(qtd)
+                .append(quantidade)
                 .append("\n");
+
+            // Complementos pertencem ao item principal e devem aparecer agrupados abaixo dele.
+            if (item.getOpcionais() != null && !item.getOpcionais().isEmpty()) {
+                for (ItemPedidoOpcional opcional : item.getOpcionais()) {
+
+                    if (opcional == null || opcional.getQuantidade() == null || opcional.getQuantidade() < 1) {
+                        continue;
+                    }
+
+                    sb.append("  - ")
+                        .append(opcional.getQuantidade())
+                        .append("x ")
+                        .append(nvlStr(opcional.getNome()))
+                        .append("\n");
+                }
+            }
         }
 
         return sb.toString().trim();
     }
-
+    
+    
     private void recalcularTotaisPedido(Pedido pedido) {
 
         if (pedido == null) return;
