@@ -1,6 +1,7 @@
 // src/main/java/br/com/oraped/api/dto/ItemPedidoRequestDTO.java
 package br.com.oraped.dto;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,6 +26,15 @@ public class ItemPedidoRequestDTO {
   @Size(max = 2000)
   private String observacoes;
 
+  private Long idOpcaoTamanhoProduto;
+  
+  private Long idOpcaoTamanho;
+  
+  @Size(max = 120)
+  private String nomeTamanho;
+  
+  private BigDecimal precoUnitario;
+  
   @Valid
   private List<ItemPedidoOpcionalRequestDTO> opcionais = new ArrayList<>();
 }

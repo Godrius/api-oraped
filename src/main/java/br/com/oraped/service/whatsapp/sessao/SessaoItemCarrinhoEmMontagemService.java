@@ -8,7 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import br.com.oraped.domain.carrinho.ComplementoItemCarrinhoEmMontagem;
-import br.com.oraped.domain.produto.Complemento;
+import br.com.oraped.domain.produto.complemento.Complemento;
+import br.com.oraped.domain.produto.tamanho.OpcaoTamanhoProduto;
 import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import br.com.oraped.repository.carrinho.ComplementoItemCarrinhoEmMontagemRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,11 +19,11 @@ import lombok.RequiredArgsConstructor;
  * Controlar o item temporário em montagem durante o fluxo de compra no WhatsApp.
  *
  * Aplicação:
- * Guarda produto, categoria, etapa do grupo de complementos e complementos escolhidos
+ * Guarda produto, categoria, tamanho, etapa do grupo de complementos e complementos escolhidos
  * antes da definição da quantidade final do item.
  *
  * Utilização:
- * Ao finalizar a escolha de complementos, o conteúdo em montagem será convertido
+ * Ao finalizar a escolha de complementos e quantidade, o conteúdo em montagem será convertido
  * em ItemCarrinho e ComplementoItemCarrinho.
  */
 @Service
@@ -50,6 +51,39 @@ public class SessaoItemCarrinhoEmMontagemService {
             quantidadeMultipla == null || quantidadeMultipla < 1 ? 1 : quantidadeMultipla
         );
         sessao.setOrdemGrupoComplementoItemEmMontagem(1);
+
+        limparTamanhoSelecionado(sessao);
+
+        sessaoStore.salvar(sessao);
+    }
+
+    @Transactional
+    public void salvarTamanhoSelecionado(
+        Long idSessao,
+        OpcaoTamanhoProduto opcaoTamanhoProduto
+    ) {
+
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        if (opcaoTamanhoProduto == null || opcaoTamanhoProduto.getOpcaoTamanho() == null) {
+            limparTamanhoSelecionado(sessao);
+            sessaoStore.salvar(sessao);
+            return;
+        }
+
+        // O preço do tamanho é preço final do produto, não adicional.
+        sessao.setIdOpcaoTamanhoProdutoItemEmMontagem(opcaoTamanhoProduto.getId());
+        sessao.setIdOpcaoTamanhoItemEmMontagem(opcaoTamanhoProduto.getOpcaoTamanho().getId());
+        sessao.setNomeTamanhoItemEmMontagem(
+            StringUtils.hasText(opcaoTamanhoProduto.getOpcaoTamanho().getNome())
+                ? opcaoTamanhoProduto.getOpcaoTamanho().getNome().trim()
+                : "Tamanho"
+        );
+        sessao.setPrecoTamanhoItemEmMontagem(
+            opcaoTamanhoProduto.getPreco() == null
+                ? BigDecimal.ZERO
+                : opcaoTamanhoProduto.getPreco()
+        );
 
         sessaoStore.salvar(sessao);
     }
@@ -104,6 +138,17 @@ public class SessaoItemCarrinhoEmMontagemService {
         sessao.setQuantidadeMultiplaItemEmMontagem(null);
         sessao.setOrdemGrupoComplementoItemEmMontagem(null);
 
+        limparTamanhoSelecionado(sessao);
+
         sessaoStore.salvar(sessao);
+    }
+
+    private void limparTamanhoSelecionado(SessaoAtendimentoWhatsapp sessao) {
+
+        // Limpa tamanho sempre que uma nova montagem começa ou termina, evitando resíduo entre itens.
+        sessao.setIdOpcaoTamanhoProdutoItemEmMontagem(null);
+        sessao.setIdOpcaoTamanhoItemEmMontagem(null);
+        sessao.setNomeTamanhoItemEmMontagem(null);
+        sessao.setPrecoTamanhoItemEmMontagem(null);
     }
 }

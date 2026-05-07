@@ -11,7 +11,7 @@ import org.springframework.util.StringUtils;
 
 import br.com.oraped.domain.Cliente;
 import br.com.oraped.domain.Estabelecimento;
-import br.com.oraped.domain.Pedido;
+import br.com.oraped.domain.pedido.Pedido;
 import br.com.oraped.repository.ClienteRepository;
 import br.com.oraped.repository.PedidoRepository;
 import lombok.RequiredArgsConstructor;

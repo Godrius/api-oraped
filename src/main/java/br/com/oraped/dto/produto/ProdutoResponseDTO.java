@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/dto/ProdutoResponseDTO.java
 package br.com.oraped.dto.produto;
 
 import java.math.BigDecimal;
@@ -20,6 +19,7 @@ public class ProdutoResponseDTO {
   private Long idMarca;
   private String nomeMarca;
 
+  private String nome;
   private String descricao;
   private BigDecimal preco;
 
@@ -47,6 +47,7 @@ public class ProdutoResponseDTO {
       this.nomeMarca = produto.getMarca().getNome();
     }
 
+    this.nome = produto.getNome();
     this.descricao = produto.getDescricao();
     this.preco = produto.getPreco();
     this.disponivelParaVenda = produto.isDisponivelParaVenda();

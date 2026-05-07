@@ -14,14 +14,14 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
-import br.com.oraped.domain.ItemPedido;
-import br.com.oraped.domain.Pedido;
 import br.com.oraped.domain.enums.StatusPedido;
+import br.com.oraped.domain.pedido.ItemPedido;
+import br.com.oraped.domain.pedido.Pedido;
 import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
-import br.com.oraped.service.PedidoService;
+import br.com.oraped.service.pedido.PedidoService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdminWhatsappUiHelper;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
 import lombok.RequiredArgsConstructor;

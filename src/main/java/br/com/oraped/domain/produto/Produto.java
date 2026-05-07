@@ -5,6 +5,7 @@ import java.util.List;
 
 import br.com.oraped.domain.BaseEntity;
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.produto.complemento.GrupoComplementoProduto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
@@ -38,7 +39,14 @@ public class Produto extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
-    @Column(nullable = false, precision = 12, scale = 2)
+    /**
+     * Preço padrão do produto.
+     *
+     * Regra:
+     * - usado somente quando a categoria do produto não possui grade de tamanhos
+     * - quando a categoria possui grade de tamanhos, o preço final vem de OpcaoTamanhoProduto.preco
+     */
+    @Column(precision = 12, scale = 2)
     private BigDecimal preco;
 
     /**

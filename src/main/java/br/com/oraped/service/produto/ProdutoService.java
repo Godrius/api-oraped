@@ -1,4 +1,3 @@
-// src/main/java/br/com/oraped/service/ProdutoService.java
 package br.com.oraped.service.produto;
 
 import java.math.BigDecimal;
@@ -6,7 +5,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,32 +20,36 @@ import br.com.oraped.dto.produto.ProdutoRequestDTO;
 import br.com.oraped.dto.produto.ProdutoResponseDTO;
 import br.com.oraped.repository.produto.ProdutoRepository;
 import br.com.oraped.service.EstabelecimentoService;
+import br.com.oraped.service.produto.tamanho.GradeTamanhoService;
+import lombok.RequiredArgsConstructor;
 
+
+/**
+ * Finalidade:
+ * Gerenciar o cadastro e as regras operacionais de produtos do cardápio.
+ *
+ * Aplicação:
+ * - cria produtos em lote
+ * - controla disponibilidade para venda
+ * - atualiza nome, descrição, foto e preço
+ * - aplica a regra de preço conforme a categoria possuir ou não grade de tamanhos
+ *
+ * Utilização:
+ * Deve ser usado pelos fluxos administrativos, APIs de produto e montagem do cardápio.
+ */
 @Service
+@RequiredArgsConstructor
 public class ProdutoService {
+
 
     private final ProdutoRepository produtoRepository;
 
     private final EstabelecimentoService estabelecimentoService;
     private final CategoriaProdutoService categoriaProdutoService;
     private final MarcaProdutoService marcaProdutoService;
+    private final GradeTamanhoService gradeTamanhoProdutoService;
 
-    public ProdutoService(
-        ProdutoRepository produtoRepository,
-        @Lazy EstabelecimentoService estabelecimentoService,
-        CategoriaProdutoService categoriaProdutoService,
-        MarcaProdutoService marcaProdutoService
-    ) {
-        this.produtoRepository = produtoRepository;
-        this.estabelecimentoService = estabelecimentoService;
-        this.categoriaProdutoService = categoriaProdutoService;
-        this.marcaProdutoService = marcaProdutoService;
-    }
-
-    // =========================
-    // ENTIDADE
-    // =========================
-
+    
     @Transactional(readOnly = true)
     public Produto buscar(Long idProduto) {
         if (idProduto == null) {
@@ -75,10 +77,6 @@ public class ProdutoService {
         return produtoRepository.findByIdIn(idsProduto);
     }
 
-    // =========================
-    // OPERACIONAL (WHATSAPP)
-    // =========================
-
     @Transactional
     public void disponibilizar(Long idProduto) {
 
@@ -100,10 +98,6 @@ public class ProdutoService {
             produtoRepository.save(produto);
         }
     }
-
-    // =========================
-    // CREATE (BATCH)
-    // =========================
 
     @Transactional
     public List<ProdutoResponseDTO> criarEmLote(ProdutoBatchRequestDTO request) {
@@ -135,10 +129,10 @@ public class ProdutoService {
             produto.setCategoria(categoria);
             produto.setMarca(marca);
 
-            String nome = (dto.getNome() == null) ? "" : dto.getNome().trim();
-            String descricao = (dto.getDescricao() == null) ? null : dto.getDescricao().trim();
+            String nome = dto.getNome() == null ? "" : dto.getNome().trim();
+            String descricao = dto.getDescricao() == null ? null : dto.getDescricao().trim();
 
-            // Fallback compatível com payload antigo do n8n (que só mandava descricao)
+            // Mantém compatibilidade com payload antigo do n8n, que enviava apenas descrição.
             if (!StringUtils.hasText(nome)) {
                 if (StringUtils.hasText(descricao)) {
                     nome = descricao;
@@ -157,17 +151,12 @@ public class ProdutoService {
             produto.setNome(nome);
             produto.setDescricao(descricao);
 
-            if (dto.getPreco() == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Preço é obrigatório no lote");
-            }
-            if (dto.getPreco().compareTo(BigDecimal.ZERO) < 0) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Preço não pode ser negativo no lote");
-            }
-            produto.setPreco(dto.getPreco());
+            aplicarPrecoConformeRegraDaCategoria(produto, categoria, dto.getPreco());
 
-            boolean disponivel = (dto.getDisponivelParaVenda() == null)
+            boolean disponivel = dto.getDisponivelParaVenda() == null
                 ? true
                 : Boolean.TRUE.equals(dto.getDisponivelParaVenda());
+
             produto.setDisponivelParaVenda(disponivel);
 
             paraSalvar.add(produto);
@@ -179,10 +168,6 @@ public class ProdutoService {
             .toList();
     }
 
-    // =========================
-    // ATUALIZAÇÕES
-    // =========================
-
     @Transactional
     public void atualizarPreco(Long idProduto, BigDecimal novoPreco) {
 
@@ -190,15 +175,22 @@ public class ProdutoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "novoPreco é obrigatório");
         }
 
-        Produto p = buscarObrigatorio(idProduto);
+        Produto produto = buscarObrigatorio(idProduto);
+
+        if (categoriaPossuiGradeTamanhoAtiva(produto.getCategoria())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Preço do produto não pode ser alterado porque a categoria usa grade de tamanhos"
+            );
+        }
 
         BigDecimal preco = novoPreco;
         if (preco.compareTo(BigDecimal.ZERO) < 0) {
             preco = BigDecimal.ZERO;
         }
 
-        p.setPreco(preco);
-        produtoRepository.save(p);
+        produto.setPreco(preco);
+        produtoRepository.save(produto);
     }
 
     @Transactional
@@ -237,7 +229,7 @@ public class ProdutoService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "novaDescricao é obrigatória");
         }
 
-        // coluna é TEXT, mas ainda assim mantemos um limite defensivo
+        // Limite defensivo para evitar payloads excessivos mesmo com coluna TEXT.
         if (desc.length() > 2000) {
             desc = desc.substring(0, 2000);
         }
@@ -251,15 +243,8 @@ public class ProdutoService {
 
         Produto p = buscarObrigatorio(idProduto);
 
-        // Se existir alguma regra futura (ex.: produto referenciado em pedido),
-        // trate aqui antes do delete.
-
         produtoRepository.delete(p);
     }
-
-    // =========================
-    // LISTAGEM (DTO)
-    // =========================
 
     @Transactional(readOnly = true)
     public List<ProdutoResponseDTO> listar(
@@ -275,7 +260,7 @@ public class ProdutoService {
 
         estabelecimentoService.validarExiste(idEstabelecimento);
 
-        boolean somenteDisponiveis = (somenteDisponiveisParaVenda == null)
+        boolean somenteDisponiveis = somenteDisponiveisParaVenda == null
             ? true
             : Boolean.TRUE.equals(somenteDisponiveisParaVenda);
 
@@ -323,8 +308,7 @@ public class ProdutoService {
 
         return produtos.stream().map(ProdutoResponseDTO::new).toList();
     }
-    
-    
+
     @Transactional(readOnly = true)
     public List<Produto> listarPorEstabelecimentoECategoria(Long idEstabelecimento, Long idCategoria) {
 
@@ -379,7 +363,8 @@ public class ProdutoService {
 
         } else if (idMarca != null) {
             produtos = produtoRepository.findByEstabelecimentoIdAndMarcaIdAndDisponivelParaVendaFalseOrderByDescricaoAsc(
-                idEstabelecimento, idMarca
+                idEstabelecimento,
+                idMarca
             );
 
         } else {
@@ -402,8 +387,7 @@ public class ProdutoService {
 
         return produtoRepository.findByEstabelecimentoIdOrderByNomeAsc(idEstabelecimento);
     }
-    
-    
+
     @Transactional
     public void atualizarUrlFoto(Long idProduto, String novaUrlFoto) {
 
@@ -421,5 +405,38 @@ public class ProdutoService {
 
         p.setUrlFoto(urlFoto);
         produtoRepository.save(p);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean categoriaPossuiGradeTamanhoAtiva(CategoriaProduto categoria) {
+
+        if (categoria == null || categoria.getId() == null) {
+            return false;
+        }
+
+        return gradeTamanhoProdutoService.categoriaPossuiGradeAtiva(categoria.getId());
+    }
+
+    private void aplicarPrecoConformeRegraDaCategoria(
+        Produto produto,
+        CategoriaProduto categoria,
+        BigDecimal precoInformado
+    ) {
+
+        if (categoriaPossuiGradeTamanhoAtiva(categoria)) {
+            // Categoria com grade usa preço das opções de tamanho; Produto.preco fica propositalmente nulo.
+            produto.setPreco(null);
+            return;
+        }
+
+        if (precoInformado == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Preço é obrigatório para categoria sem grade de tamanhos");
+        }
+
+        if (precoInformado.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Preço não pode ser negativo");
+        }
+
+        produto.setPreco(precoInformado);
     }
 }

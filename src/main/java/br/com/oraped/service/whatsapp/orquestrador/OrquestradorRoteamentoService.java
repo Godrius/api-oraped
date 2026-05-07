@@ -6,14 +6,16 @@ import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.OrquestradorContexto;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
+import br.com.oraped.service.whatsapp.administrador.roteamento.RoteamentoAdminService;
+import br.com.oraped.service.whatsapp.cliente.roteamento.RoteamentoClienteService;
 import lombok.RequiredArgsConstructor;
 
 @Service
 @RequiredArgsConstructor
 public class OrquestradorRoteamentoService {
 
-    private final OrquestradorRoteamentoAdminService rotearAdmin;
-    private final OrquestradorRoteamentoClienteService rotearCliente;
+    private final RoteamentoAdminService rotearAdmin;
+    private final RoteamentoClienteService rotearCliente;
 
     public RoteamentoResultado rotearComando(
 	    OrquestradorContexto ctx,

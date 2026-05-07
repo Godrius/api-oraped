@@ -235,7 +235,7 @@ public class BairroService {
                 base.getLongitude(),
                 base.getCidade(),
                 base.getUf(),
-                40
+                60
             );
 
         if (proximos != null) {
@@ -243,7 +243,7 @@ public class BairroService {
                 .filter(Objects::nonNull)
                 .filter(p -> StringUtils.hasText(p.getBairro()))
                 .sorted(Comparator.comparingInt(p -> p.getDistanciaMetros() == null ? Integer.MAX_VALUE : p.getDistanciaMetros()))
-                .limit(40)
+                .limit(60)
                 .toList();
 
             for (EnderecoBairroProximoDTO p : proximos) {

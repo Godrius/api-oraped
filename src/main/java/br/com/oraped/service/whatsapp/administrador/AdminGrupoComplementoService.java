@@ -12,14 +12,14 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
-import br.com.oraped.domain.produto.Complemento;
-import br.com.oraped.domain.produto.GrupoComplemento;
-import br.com.oraped.dto.produto.ComplementoRequestDTO;
-import br.com.oraped.dto.produto.ComplementoResponseDTO;
-import br.com.oraped.dto.produto.GrupoComplementoRequestDTO;
-import br.com.oraped.dto.produto.GrupoComplementoResponseDTO;
+import br.com.oraped.domain.produto.complemento.Complemento;
+import br.com.oraped.domain.produto.complemento.GrupoComplemento;
+import br.com.oraped.dto.produto.complemento.ComplementoRequestDTO;
+import br.com.oraped.dto.produto.complemento.ComplementoResponseDTO;
+import br.com.oraped.dto.produto.complemento.GrupoComplementoRequestDTO;
+import br.com.oraped.dto.produto.complemento.GrupoComplementoResponseDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
-import br.com.oraped.service.produto.GrupoComplementoService;
+import br.com.oraped.service.produto.complemento.GrupoComplementoService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdminWhatsappUiHelper;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminComplementoService;
@@ -63,14 +63,15 @@ public class AdminGrupoComplementoService {
 
         if (grupos.isEmpty()) {
             String corpo =
-                "🧩 *Grupos de complementos*\n\n" +
-                    "*" + uiHelper.msg().safe(estabelecimento.getNome()) + "*\n\n" +
-                    "Ainda não há grupos de complementos cadastrados.\n\n" +
-                    "Use esta área para criar grupos reutilizáveis, como:\n" +
-                    "- Tipo de massa\n" +
-                    "- Borda\n" +
-                    "- Recheio da borda\n" +
-                    "- Molho extra";
+                "🧩 *Grupos de complementos opcionais*\n\n" +
+                    "Ainda não há grupos cadastrados.\n\n" +
+                	"*Explicação*\n" +	
+                    "Se alguma categoria de produtos do seu estabelecimento pode ser vendida com itens extras opcionais, você pode configurar aqui o grupo contendo todos os itens extras que podem ser oferecidos aos clientes durante a realização do pedido.\n\n" +
+                    "Por exemplo:\n" +
+                    "Em uma pizzaria, após escolher a pizza desejada o cliente pode adicionar:\n" +
+                    "- Borda recheada com chocolate\n" +
+                    "- Borda recheada com doce de leite\n\n" +
+                    "Para este caso, basta criar um grupo chamado _Bordas de Pizzas Doces_ (ou qualquer nome que descreva bem o grupo) e adicionar nele esses itens opcionais.";
 
             return new AdministradorWhatsappResultados.ResultadoAdmin(
                 "admin_comp_grupos_vazio",
@@ -97,7 +98,6 @@ public class AdminGrupoComplementoService {
 
         String corpo =
             "🧩 *Grupos de complementos*\n\n" +
-                "*" + uiHelper.msg().safe(estabelecimento.getNome()) + "*\n\n" +
                 "Escolha um grupo para gerenciar.";
 
         List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
@@ -168,27 +168,68 @@ public class AdminGrupoComplementoService {
             descricao = "Sem descrição.";
         }
 
-        String corpo =
-            "🧩 *Grupo de complementos*\n\n" +
-                "*" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
-                "*Descrição:* " + uiHelper.msg().trunc(descricao, 250) + "\n" +
-                "*Status:* " + status + "\n" +
-                "*Mínimo:* " + grupo.getMinimoSelecoes() + "\n" +
-                "*Máximo:* " + grupo.getMaximoSelecoes() + "\n\n" +
-                "O que deseja fazer?";
+        String descricaoRegra;
 
+        if (grupo.getMinimoSelecoes() == 0 && grupo.getMaximoSelecoes() == 1) {
+            descricaoRegra = "Opcional, até 1 opção";
+        } else if (grupo.getMinimoSelecoes() == 1 && grupo.getMaximoSelecoes() == 1) {
+            descricaoRegra = "Obrigatório escolher 1 opção";
+        } else if (grupo.getMinimoSelecoes() == 0) {
+            descricaoRegra = "Opcional, até " + grupo.getMaximoSelecoes() + " opções";
+        } else if (grupo.getMinimoSelecoes().equals(grupo.getMaximoSelecoes())) {
+            descricaoRegra = "Obrigatório escolher " + grupo.getMaximoSelecoes() + " opções";
+        } else {
+            descricaoRegra = "De " + grupo.getMinimoSelecoes() + " até " + grupo.getMaximoSelecoes() + " opções";
+        }
+
+        String corpo =
+            "🧩 *Detalhes do grupo de complementos*\n\n" +
+
+            "*Grupo*\n" +
+            uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "\n\n" +
+
+            "*Configuração*\n" +
+            "- Descrição: " + uiHelper.msg().trunc(descricao, 250) + "\n" +
+            "- Status: *" + status + "*\n\n" +
+
+            "*Regra de consumo*\n" +
+            "- Mínimo: *" + grupo.getMinimoSelecoes() + "*\n" +
+            "- Máximo: *" + grupo.getMaximoSelecoes() + "*\n" +
+            "- Funcionamento: " + descricaoRegra + "\n\n" +
+
+            "*Como isso funciona?*\n" +
+            "Este grupo será apresentado ao cliente durante a escolha do produto, permitindo selecionar opções adicionais conforme a regra definida.\n\n" +
+
+            "O que deseja fazer?";
+
+        
+        String resumoRegraConsumo;
+
+        if (grupo.getMinimoSelecoes() == 0 && grupo.getMaximoSelecoes() == 1) {
+        	resumoRegraConsumo = "Opcional, até 1";
+        } else if (grupo.getMinimoSelecoes() == 1 && grupo.getMaximoSelecoes() == 1) {
+        	resumoRegraConsumo = "Obrigatório, 1";
+        } else if (grupo.getMinimoSelecoes() == 0) {
+        	resumoRegraConsumo = "Opcional, até " + grupo.getMaximoSelecoes();
+        } else if (grupo.getMinimoSelecoes().equals(grupo.getMaximoSelecoes())) {
+        	resumoRegraConsumo = "Obrigatório, " + grupo.getMaximoSelecoes();
+        } else {
+        	resumoRegraConsumo = grupo.getMinimoSelecoes() + " a " + grupo.getMaximoSelecoes();
+        }
+
+        
         return new AdministradorWhatsappResultados.ResultadoAdmin(
             "admin_comp_grupo_detalhe",
             uiHelper.msg().lista(
                 whatsappAdmin,
                 uiHelper.msg().truncWord(corpo, 1024),
-                "Grupo",
+                "Ver opções",
                 "Opções",
                 List.of(
                     uiHelper.row(
                         "COMANDO|ADMIN_COMP_GRUPO_COMPLEMENTOS|" + idGrupo + "|" + safeOffset + "|0",
-                        "Ver complementos",
-                        "Opções deste grupo"
+                        "Complementos cadastrados",
+                        uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80)
                     ),
                     uiHelper.row(
                         "COMANDO|ADMIN_COMP_GRUPO_EDITAR_NOME_MENU|" + idGrupo + "|" + safeOffset,
@@ -201,9 +242,9 @@ public class AdminGrupoComplementoService {
                         "Alterar descrição do grupo"
                     ),
                     uiHelper.row(
-                        "COMANDO|ADMIN_COMP_GRUPO_REGRAS_MENU|" + idGrupo + "|" + safeOffset,
-                        "Editar regras",
-                        "Mínimo e máximo"
+                	    "COMANDO|ADMIN_COMP_GRUPO_REGRAS_MENU|" + idGrupo + "|" + safeOffset,
+                	    "Regras de consumo",
+                	    resumoRegraConsumo
                     ),
                     uiHelper.row(
                         "COMANDO|ADMIN_COMP_GRUPO_STATUS|" + idGrupo + "|" + safeOffset + "|" + (grupo.isAtivo() ? "0" : "1"),
@@ -276,12 +317,18 @@ public class AdminGrupoComplementoService {
         sessaoAdminGrupoComplementoService.marcarAguardandoNovoGrupo(idSessao, safeOffset);
 
         String corpo =
-            "➕ *Novo grupo de complementos*\n\n" +
-                "Agora envie apenas o *nome do grupo*.\n\n" +
-                "Exemplos:\n" +
-                "- Tipo de massa\n" +
-                "- Borda\n" +
-                "- Molho extra";
+    	    "➕ *Novo grupo de complementos*\n\n" +
+	        "*O que é um grupo?*\n" +
+	        "Um grupo reúne opções de complementos que o cliente pode adicionar no pedido.\n\n" +
+	        "Exemplo: Em uma pizzaria, o grupo \"Borda Recheada\" pode ter os itens cheddar, catupiry ou chocolate.\n\n" +
+	        "*Como nomear?*\n" +
+	        "- Use nomes curtos e claros\n" +
+	        "- Máximo de *24 caracteres*\n\n" +
+	        "Agora envie apenas o *nome do grupo*.\n\n" +
+	        "Exemplos:\n" +
+	        "- Tipo de massa\n" +
+	        "- Borda\n" +
+	        "- Molho extra";
 
         return new AdministradorWhatsappResultados.ResultadoAdmin(
             "admin_comp_grupo_novo_digitacao",
@@ -336,7 +383,13 @@ public class AdminGrupoComplementoService {
                 whatsappAdmin,
                 uiHelper.msg().trunc(corpo, 1024),
                 List.of(
-                    uiHelper.btn("COMANDO|ADMIN_COMP_GRUPO_DETALHE|" + salvo.getId() + "|" + safeOffset, "🧩 Ver grupo"),
+                    uiHelper.btn(
+                    	"COMANDO|ADMIN_COMP_GRUPO_DETALHE|" + salvo.getId() + "|" + safeOffset, 
+                    	"🧩 Ver grupo"),
+                    uiHelper.btn(
+                	    "COMANDO|ADMIN_COMP_COMPLEMENTO_NOVO_MENU|" + salvo.getId() + "|" + safeOffset,
+                	    "➕ Incluir complemento"
+                	),
                     uiHelper.btn("COMANDO|ADMIN_COMP_GRUPOS_MENU|" + safeOffset, "⬅️ Voltar")
                 )
             )
@@ -530,12 +583,19 @@ public class AdminGrupoComplementoService {
         int safeOffset = normalizarOffset(offsetGrupos);
 
         String corpo =
-            "⚙️ *Regras do grupo*\n\n" +
-                "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
-                "Atual:\n" +
-                "- Mínimo: *" + grupo.getMinimoSelecoes() + "*\n" +
-                "- Máximo: *" + grupo.getMaximoSelecoes() + "*\n\n" +
-                "Escolha uma configuração:";
+        	    "⚙️ *Regras do grupo*\n\n" +
+    	        "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
+    	        "Atual:\n" +
+    	        "- Mínimo: *" + grupo.getMinimoSelecoes() + "*\n" +
+    	        "- Máximo: *" + grupo.getMaximoSelecoes() + "*\n\n" +
+    	        "*Como funciona?*\n" +
+    	        "- *Mínimo*: quantidade obrigatória que o cliente deve escolher\n" +
+    	        "- *Máximo*: limite de opções que o cliente pode selecionar\n\n" +
+    	        "Exemplos:\n" +
+    	        "- Mín 0 / Máx 1 → opcional (pode escolher ou não)\n" +
+    	        "- Mín 1 / Máx 1 → obrigatório escolher 1\n" +
+    	        "- Mín 0 / Máx 3 → pode escolher até 3\n\n" +
+    	        "Escolha uma configuração:";
 
         return new AdministradorWhatsappResultados.ResultadoAdmin(
             "admin_comp_grupo_regras_menu",
@@ -584,11 +644,29 @@ public class AdminGrupoComplementoService {
 
         grupoComplementoService.salvarGrupo(idGrupo, dto);
 
+        String descricaoRegra;
+
+        if (minimo == 0 && maximo == 0) {
+            descricaoRegra = "O cliente não poderá selecionar opções deste grupo.";
+        } else if (minimo == 0 && maximo == 1) {
+            descricaoRegra = "O cliente poderá escolher *no máximo 1 opção* (opcional).";
+        } else if (minimo == 1 && maximo == 1) {
+            descricaoRegra = "O cliente deverá escolher *exatamente 1 opção* (obrigatório).";
+        } else if (minimo == 0) {
+            descricaoRegra = "O cliente poderá escolher *até " + maximo + " opções*.";
+        } else if (minimo.equals(maximo)) {
+            descricaoRegra = "O cliente deverá escolher *exatamente " + maximo + " opções*.";
+        } else {
+            descricaoRegra = "O cliente deverá escolher *de " + minimo + " até " + maximo + " opções*.";
+        }
+
         String corpo =
             "✅ Regras atualizadas.\n\n" +
-                "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
-                "- Mínimo: *" + minimo + "*\n" +
-                "- Máximo: *" + maximo + "*";
+            "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
+            "- Mínimo: *" + minimo + "*\n" +
+            "- Máximo: *" + maximo + "*\n\n" +
+            "*Como funcionará para o cliente:*\n" +
+            descricaoRegra;
 
         return new AdministradorWhatsappResultados.ResultadoAdmin(
             "admin_comp_grupo_regras_ok",
@@ -705,8 +783,7 @@ public class AdminGrupoComplementoService {
 
         if (complementos.isEmpty()) {
             String corpo =
-                "🧩 *Complementos do grupo*\n\n" +
-                    "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
+                "🧩 *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
                     "Este grupo ainda não possui complementos cadastrados.";
 
             return new AdministradorWhatsappResultados.ResultadoAdmin(
@@ -739,8 +816,7 @@ public class AdminGrupoComplementoService {
         boolean temMais = endExclusive < complementos.size();
 
         String corpo =
-            "🧩 *Complementos do grupo*\n\n" +
-                "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
+            "🧩 *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
                 "Escolha um complemento para gerenciar.";
 
         List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
@@ -783,66 +859,77 @@ public class AdminGrupoComplementoService {
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin montarDetalheComplementoGlobal(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idGrupo,
-        Integer offsetGrupos,
-        Long idComplemento
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idGrupo,
+	    Integer offsetGrupos,
+	    Long idComplemento
+	) {
 
-        uiHelper.validarBasico(estabelecimento, whatsappAdmin);
+	    uiHelper.validarBasico(estabelecimento, whatsappAdmin);
 
-        GrupoComplemento grupo = grupoComplementoService.buscarObrigatorio(idGrupo);
-        Complemento complemento = grupoComplementoService.buscarComplementoObrigatorio(idComplemento);
+	    GrupoComplemento grupo = grupoComplementoService.buscarObrigatorio(idGrupo);
+	    Complemento complemento = grupoComplementoService.buscarComplementoObrigatorio(idComplemento);
 
-        validarGrupoDoEstabelecimento(estabelecimento, grupo);
-        validarComplementoDoGrupo(complemento, idGrupo);
+	    validarGrupoDoEstabelecimento(estabelecimento, grupo);
+	    validarComplementoDoGrupo(complemento, idGrupo);
 
-        String descricao = uiHelper.msg().safe(complemento.getDescricao());
-        if (!StringUtils.hasText(descricao)) {
-            descricao = "Sem descrição.";
-        }
+	    String descricao = uiHelper.msg().safe(complemento.getDescricao());
+	    if (!StringUtils.hasText(descricao)) {
+	        descricao = "Sem descrição.";
+	    }
 
-        String comandoStatus = complemento.isAtivo()
-            ? "COMANDO|ADMIN_COMP_COMPLEMENTO_STATUS|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento + "|0"
-            : "COMANDO|ADMIN_COMP_COMPLEMENTO_STATUS|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento + "|1";
+	    String comandoStatus = complemento.isAtivo()
+	        ? "COMANDO|ADMIN_COMP_COMPLEMENTO_STATUS|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento + "|0"
+	        : "COMANDO|ADMIN_COMP_COMPLEMENTO_STATUS|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento + "|1";
 
-        String corpo =
-            "🧩 *Complemento*\n\n" +
-                "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
-                "*Opção:* " + uiHelper.msg().trunc(uiHelper.msg().safe(complemento.getNome()), 80) + "\n" +
-                "*Descrição:* " + uiHelper.msg().trunc(descricao, 300) + "\n" +
-                "*Preço adicional:* " + uiHelper.msg().formatarMoeda(complemento.getPrecoAdicional()) + "\n" +
-                "*Status:* " + (complemento.isAtivo() ? "Ativo" : "Inativo") + "\n\n" +
-                "O que deseja fazer?";
+	    String corpo =
+	    	    "🧩 *Detalhes do complemento*\n\n" +
+    	        "*Grupo*\n" +
+    	        uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "\n\n" +
+    	        "*Complemento*\n" +
+    	        "- Nome: *" + uiHelper.msg().trunc(uiHelper.msg().safe(complemento.getNome()), 80) + "*\n" +
+    	        "- Descrição: " + uiHelper.msg().trunc(descricao, 300) + "\n" +
+    	        "- Preço adicional: *" + uiHelper.msg().formatarMoeda(complemento.getPrecoAdicional()) + "*\n" +
+    	        "- Status: *" + (complemento.isAtivo() ? "Ativo" : "Inativo") + "*\n\n" +
+    	        "*Como isso aparece para o cliente?*\n" +
+    	        "Este complemento será exibido como uma opção dentro do grupo *" +
+    	        uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 60) + "* durante a montagem do pedido.\n\n" +
+    	        "Se houver preço adicional, ele será somado ao valor do item quando o cliente escolher essa opção.\n\n" +
+    	        "O que deseja fazer?";
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_comp_complemento_detalhe",
-            uiHelper.msg().lista(
-                whatsappAdmin,
-                uiHelper.msg().truncWord(corpo, 1024),
-                "Complemento",
-                "Opções",
-                List.of(
-                    uiHelper.row(
-                        "COMANDO|ADMIN_COMP_COMPLEMENTO_PRECO_MENU|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento,
-                        "Ajustar preço",
-                        "Preço adicional"
-                    ),
-                    uiHelper.row(
-                        comandoStatus,
-                        complemento.isAtivo() ? "Desativar" : "Ativar",
-                        complemento.isAtivo() ? "Ocultar esta opção" : "Liberar esta opção"
-                    ),
-                    uiHelper.row(
-                        "COMANDO|ADMIN_COMP_GRUPO_COMPLEMENTOS|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|0",
-                        "⬅️ Voltar",
-                        "Complementos do grupo"
-                    )
-                )
-            )
-        );
-    }
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_comp_complemento_detalhe",
+	        uiHelper.msg().lista(
+	            whatsappAdmin,
+	            uiHelper.msg().truncWord(corpo, 1024),
+	            "Ver opções",
+	            "Opções",
+	            List.of(
+	                uiHelper.row(
+	                    "COMANDO|ADMIN_COMP_COMPLEMENTO_NOME_MENU|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento,
+	                    "Alterar nome",
+	                    complemento.getNome()
+	                ),
+	                uiHelper.row(
+	                    "COMANDO|ADMIN_COMP_COMPLEMENTO_PRECO_MENU|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|" + idComplemento,
+	                    "Ajustar preço",
+	                    uiHelper.msg().formatarMoeda(complemento.getPrecoAdicional())
+	                ),
+	                uiHelper.row(
+	                    comandoStatus,
+	                    complemento.isAtivo() ? "Desativar" : "Ativar",
+	                    complemento.isAtivo() ? "Ocultar esta opção" : "Liberar esta opção"
+	                ),
+	                uiHelper.row(
+	                    "COMANDO|ADMIN_COMP_GRUPO_COMPLEMENTOS|" + idGrupo + "|" + normalizarOffset(offsetGrupos) + "|0",
+	                    "⬅️ Voltar",
+	                    "Complementos do grupo"
+	                )
+	            )
+	        )
+	    );
+	}
 
     public AdministradorWhatsappResultados.ResultadoAdmin alterarStatusComplementoGlobal(
         Estabelecimento estabelecimento,
@@ -907,10 +994,11 @@ public class AdminGrupoComplementoService {
 	    );
 
 	    String corpo =
-	        "➕ *Novo complemento*\n\n" +
-	            "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
-	            "Digite o *nome do complemento*.\n\n" +
-	            "Exemplo: Granola";
+	    	    "➕ *Novo complemento*\n\n" +
+    	        "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n\n" +
+    	        "Digite o *nome do complemento*.\n\n" +
+    	        "Use no máximo *24 letras* para que o nome apareça corretamente nas listas do WhatsApp.\n\n" +
+    	        "Exemplo: *Borda de chocolate*";
 
 	    return new AdministradorWhatsappResultados.ResultadoAdmin(
 	        "admin_comp_complemento_novo_digitacao",
@@ -991,13 +1079,126 @@ public class AdminGrupoComplementoService {
 	                ),
 	            	uiHelper.btn(
 	                    "COMANDO|ADMIN_COMP_COMPLEMENTO_NOVO_MENU|" + idGrupo + "|" + offsetGrupos,
-	                    "➕ Novo"
+	                    "➕ Cadastrar outro"
 	                )
 	            )
 	        )
 	    );
 	}
     
+    // =========================================================
+    // NOME DO COMPLEMENTO GLOBAL
+    // =========================================================
+    public AdministradorWhatsappResultados.ResultadoAdmin montarMenuAlterarNomeComplementoGlobal(
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idSessao,
+	    Long idGrupo,
+	    Integer offsetGrupos,
+	    Long idComplemento
+	) {
+
+	    uiHelper.validarBasico(estabelecimento, whatsappAdmin);
+	    validarSessao(idSessao);
+
+	    GrupoComplemento grupo = grupoComplementoService.buscarObrigatorio(idGrupo);
+	    Complemento complemento = grupoComplementoService.buscarComplementoObrigatorio(idComplemento);
+
+	    validarGrupoDoEstabelecimento(estabelecimento, grupo);
+	    validarComplementoDoGrupo(complemento, idGrupo);
+
+	    sessaoAdminComplementoService.marcarAguardandoEditarNomeComplementoGlobal(
+	        idSessao,
+	        idGrupo,
+	        idComplemento,
+	        offsetGrupos
+	    );
+
+	    String corpo =
+	    	    "✏️ *Alterar nome do complemento*\n\n" +
+	    	        "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n" +
+	    	        "Complemento atual: *" + uiHelper.msg().trunc(uiHelper.msg().safe(complemento.getNome()), 80) + "*\n\n" +
+	    	        "Envie agora o novo nome para este complemento.\n\n" +
+	    	        "Use no máximo *24 letras* para que o nome apareça corretamente nas listas do WhatsApp.\n\n" +
+	    	        "Exemplo: *Borda de chocolate*";
+
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_comp_complemento_nome_menu",
+	        uiHelper.msg().texto(
+	            whatsappAdmin,
+	            uiHelper.msg().truncWord(corpo, 1024)
+	        )
+	    );
+	}
+    
+    public AdministradorWhatsappResultados.ResultadoAdmin concluirAlteracaoNomeComplementoGlobalPorDigitacao(
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idSessao,
+	    String novoNome
+	) {
+
+	    uiHelper.validarBasico(estabelecimento, whatsappAdmin);
+	    validarSessao(idSessao);
+
+	    if (!sessaoAdminComplementoService.isAguardandoEditarNomeComplementoGlobal(idSessao)) {
+	        throw new ResponseStatusException(HttpStatus.CONFLICT, "Sessão não está aguardando edição do nome do complemento");
+	    }
+
+	    if (!StringUtils.hasText(novoNome)) {
+	        return new AdministradorWhatsappResultados.ResultadoAdmin(
+	            "admin_comp_complemento_nome_invalido",
+	            uiHelper.msg().texto(
+	                whatsappAdmin,
+	                uiHelper.msg().trunc("Envie um nome válido para o complemento.", 1024)
+	            )
+	        );
+	    }
+
+	    Long idGrupo = sessaoAdminComplementoService.getIdGrupoEditarNomeComplementoGlobal(idSessao);
+	    Long idComplemento = sessaoAdminComplementoService.getIdComplementoEditarNomeGlobal(idSessao);
+	    int offsetGrupos = sessaoAdminComplementoService.getOffsetEditarNomeComplementoGlobal(idSessao);
+
+	    GrupoComplemento grupo = grupoComplementoService.buscarObrigatorio(idGrupo);
+	    Complemento complemento = grupoComplementoService.buscarComplementoObrigatorio(idComplemento);
+
+	    validarGrupoDoEstabelecimento(estabelecimento, grupo);
+	    validarComplementoDoGrupo(complemento, idGrupo);
+
+	    ComplementoRequestDTO request = new ComplementoRequestDTO();
+	    request.setIdGrupo(idGrupo);
+	    request.setNome(novoNome.trim());
+	    request.setDescricao(complemento.getDescricao());
+	    request.setPrecoAdicional(complemento.getPrecoAdicional());
+	    request.setAtivo(complemento.isAtivo());
+
+	    grupoComplementoService.salvarComplemento(idComplemento, request);
+	    sessaoAdminComplementoService.limparAguardandoEditarNomeComplementoGlobal(idSessao);
+
+	    String corpo =
+	        "✅ Nome do complemento atualizado.\n\n" +
+	            "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(grupo.getNome()), 80) + "*\n" +
+	            "Novo nome: *" + uiHelper.msg().trunc(uiHelper.msg().safe(novoNome.trim()), 80) + "*";
+
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_comp_complemento_nome_ok",
+	        uiHelper.msg().botoes(
+	            whatsappAdmin,
+	            uiHelper.msg().trunc(corpo, 1024),
+	            List.of(
+	                uiHelper.btn(
+	                    "COMANDO|ADMIN_COMP_COMPLEMENTO_DETALHE|" + idGrupo + "|" + offsetGrupos + "|" + idComplemento,
+	                    "🧩 Ver complemento"
+	                ),
+	                uiHelper.btn(
+	                    "COMANDO|ADMIN_COMP_GRUPO_COMPLEMENTOS|" + idGrupo + "|" + offsetGrupos + "|0",
+	                    "⬅️ Voltar"
+	                )
+	            )
+	        )
+	    );
+	}
+
     // =========================================================
     // PREÇO DO COMPLEMENTO GLOBAL
     // =========================================================

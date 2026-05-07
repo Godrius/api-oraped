@@ -10,9 +10,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import br.com.oraped.domain.Estabelecimento;
-import br.com.oraped.domain.ItemPedido;
-import br.com.oraped.domain.Pedido;
 import br.com.oraped.domain.enums.StatusPedido;
+import br.com.oraped.domain.pedido.ItemPedido;
+import br.com.oraped.domain.pedido.Pedido;
 
 public interface PedidoRepository extends JpaRepository<Pedido, Long> {
 

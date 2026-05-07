@@ -4,7 +4,6 @@ package br.com.oraped.dto.produto;
 import java.math.BigDecimal;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -28,7 +27,6 @@ public class ProdutoRequestDTO {
   // opcional
   private String descricao;
 
-  @NotNull(message = "preco é obrigatório")
   private BigDecimal preco;
 
   // default true quando null (no service)

@@ -10,7 +10,12 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Serviço responsável pelos estados administrativos de produto na sessão WhatsApp.
- * Aplicação: alteração de preço, nome, descrição e foto por interação no WhatsApp.
+ *
+ * Aplicação:
+ * - alteração de preço, nome, descrição e foto de produto
+ * - cadastro de categoria/produto por digitação
+ * - cadastro de opções de tamanho
+ * - alteração de preço por tamanho do produto
  */
 @Service
 @RequiredArgsConstructor
@@ -262,45 +267,7 @@ public class SessaoWhatsappAdminProdutoService {
         sessaoStore.salvar(sessao);
     }
 
-    // =========================================================
-    // ADMIN — Categoria de produto (Criar por digitação)
-    // =========================================================
-
-    @Transactional(readOnly = true)
-    public boolean isAguardandoNovaCategoria(Long idSessao) {
-        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
-        return Boolean.TRUE.equals(sessao.getAguardandoNovaCategoria());
-    }
-
-    @Transactional(readOnly = true)
-    public Integer getOffsetListaNovaCategoria(Long idSessao) {
-        Integer offset = sessaoStore.buscarPorId(idSessao).getOffsetListaNovaCategoria();
-        return normalizarOffset(offset);
-    }
-
-    @Transactional
-    public void marcarAguardandoNovaCategoria(Long idSessao, Integer offsetLista) {
-        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
-
-        sessao.setAguardandoNovaCategoria(true);
-        sessao.setOffsetListaNovaCategoria(normalizarOffset(offsetLista));
-
-        // Evita conflito com estados de cliente baseados no campo genérico aguardando.
-        sessao.setAguardando(null);
-
-        sessaoStore.salvar(sessao);
-    }
-
-    @Transactional
-    public void limparAguardandoNovaCategoria(Long idSessao) {
-        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
-
-        sessao.setAguardandoNovaCategoria(false);
-        sessao.setOffsetListaNovaCategoria(null);
-
-        sessaoStore.salvar(sessao);
-    }
-
+    
     // =========================================================
     // ADMIN — Produto (Criar por digitação)
     // =========================================================
@@ -356,8 +323,35 @@ public class SessaoWhatsappAdminProdutoService {
 
         sessaoStore.salvar(sessao);
     }
+     
+	
+    @Transactional(readOnly = true)
+    public boolean isCadastroGuiadoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+        return Boolean.TRUE.equals(sessao.getCadastroGuiadoProduto());
+    }
+
+    @Transactional
+    public void marcarCadastroGuiadoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        // Marca que os próximos estados reaproveitados fazem parte do cadastro inicial do produto.
+        sessao.setCadastroGuiadoProduto(true);
+
+        sessaoStore.salvar(sessao);
+    }
+
+    @Transactional
+    public void limparCadastroGuiadoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setCadastroGuiadoProduto(false);
+
+        sessaoStore.salvar(sessao);
+    }
     
     private Integer normalizarOffset(Integer offset) {
         return offset == null ? 0 : Math.max(0, offset);
     }
+	 
 }

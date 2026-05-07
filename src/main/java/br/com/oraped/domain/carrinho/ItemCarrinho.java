@@ -1,5 +1,6 @@
 package br.com.oraped.domain.carrinho;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -52,7 +53,19 @@ public class ItemCarrinho extends BaseEntity {
 
     @Column(columnDefinition = "TEXT")
     private String observacoes;
+    
+    @Column(name = "id_opcao_tamanho_produto")
+    private Long idOpcaoTamanhoProduto;
 
+    @Column(name = "id_opcao_tamanho")
+    private Long idOpcaoTamanho;
+
+    @Column(name = "nome_tamanho", length = 120)
+    private String nomeTamanho;
+
+    @Column(name = "preco_unitario", precision = 12, scale = 2)
+    private BigDecimal precoUnitario;
+    
     @OneToMany(mappedBy = "itemCarrinho", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ComplementoItemCarrinho> complementos = new ArrayList<>();
 }

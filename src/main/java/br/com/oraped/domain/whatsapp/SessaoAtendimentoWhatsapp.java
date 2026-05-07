@@ -131,6 +131,12 @@ public class SessaoAtendimentoWhatsapp {
     private BigDecimal trocoPara;
 
     // =========================================================
+    // ADMIN — Produto (cadastro guiado)
+    // =========================================================
+    @Column(name = "cadastro_guiado_produto")
+    private Boolean cadastroGuiadoProduto;
+    
+    // =========================================================
     // ADMIN — Produto (Preço por digitação)
     // =========================================================
 
@@ -278,41 +284,41 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "aguardando_bairros_atendidos", nullable = false)
     private Boolean aguardandoBairrosAtendidos;
     
-	 // =========================================================
-	 // ADMIN — Grupo de complementos (Criar por digitação)
-	 // =========================================================
+	// =========================================================
+	// ADMIN — Grupo de complementos (Criar por digitação)
+	// =========================================================
 	
-	 @Column(name = "aguardando_novo_grupo_complemento", nullable = false)
-	 private boolean aguardandoNovoGrupoComplemento = false;
+	@Column(name = "aguardando_novo_grupo_complemento", nullable = false)
+	private boolean aguardandoNovoGrupoComplemento = false;
 	
-	 @Column(name = "offset_novo_grupo_complemento")
-	 private Integer offsetNovoGrupoComplemento = 0;
+	@Column(name = "offset_novo_grupo_complemento")
+	private Integer offsetNovoGrupoComplemento = 0;
 	
-	 // =========================================================
-	 // ADMIN — Grupo de complementos (Editar nome por digitação)
-	 // =========================================================
+	// =========================================================
+	// ADMIN — Grupo de complementos (Editar nome por digitação)
+	// =========================================================
 	
-	 @Column(name = "aguardando_editar_nome_grupo_complemento", nullable = false)
-	 private boolean aguardandoEditarNomeGrupoComplemento = false;
+	@Column(name = "aguardando_editar_nome_grupo_complemento", nullable = false)
+	private boolean aguardandoEditarNomeGrupoComplemento = false;
 	
-	 @Column(name = "id_grupo_complemento_editar_nome")
-	 private Long idGrupoComplementoEditarNome;
+	@Column(name = "id_grupo_complemento_editar_nome")
+	private Long idGrupoComplementoEditarNome;
 	
-	 @Column(name = "offset_editar_nome_grupo_complemento")
-	 private Integer offsetEditarNomeGrupoComplemento = 0;
+	@Column(name = "offset_editar_nome_grupo_complemento")
+	private Integer offsetEditarNomeGrupoComplemento = 0;
 	
-	 // =========================================================
-	 // ADMIN — Grupo de complementos (Editar descrição por digitação)
-	 // =========================================================
+	// =========================================================
+	// ADMIN — Grupo de complementos (Editar descrição por digitação)
+	// =========================================================
 	
-	 @Column(name = "aguardando_editar_descricao_grupo_complemento", nullable = false)
-	 private boolean aguardandoEditarDescricaoGrupoComplemento = false;
+	@Column(name = "aguardando_editar_descricao_grupo_complemento", nullable = false)
+	private boolean aguardandoEditarDescricaoGrupoComplemento = false;
 	
-	 @Column(name = "id_grupo_complemento_editar_descricao")
-	 private Long idGrupoComplementoEditarDescricao;
+	@Column(name = "id_grupo_complemento_editar_descricao")
+	private Long idGrupoComplementoEditarDescricao;
 	
-	 @Column(name = "offset_editar_descricao_grupo_complemento")
-	 private Integer offsetEditarDescricaoGrupoComplemento = 0;
+	@Column(name = "offset_editar_descricao_grupo_complemento")
+	private Integer offsetEditarDescricaoGrupoComplemento = 0;
 	 
 	// =========================================================
 	// ADMIN — Complemento de grupo (Criar por digitação)
@@ -327,17 +333,33 @@ public class SessaoAtendimentoWhatsapp {
 	@Column(name = "offset_novo_complemento_grupo")
 	private Integer offsetNovoComplementoGrupo = 0;
 	
+	// =========================================================
+	// ADMIN — Complemento de grupo (Editar nome por digitação)
+	// =========================================================
+
+	@Column(name = "aguardando_editar_nome_complemento_global", nullable = false)
+	private boolean aguardandoEditarNomeComplementoGlobal = false;
+
+	@Column(name = "id_grupo_editar_nome_complemento_global")
+	private Long idGrupoEditarNomeComplementoGlobal;
+
+	@Column(name = "id_complemento_editar_nome_global")
+	private Long idComplementoEditarNomeGlobal;
+
+	@Column(name = "offset_editar_nome_complemento_global")
+	private Integer offsetEditarNomeComplementoGlobal = 0;
+	
     // =========================================================
     // ADMIN — Preços dos complementos
     // =========================================================
     		
     /**
-     * Controle temporário para alteração de preço de complemento pelo admin.
-     *
-     * Aplicação:
-     * - usado quando o admin escolhe "Outro valor" no menu do complemento
-     * - preserva o contexto necessário para retornar ao grupo/produto após a digitação
-     */
+    * Controle temporário para alteração de preço de complemento pelo admin.
+    *
+    * Aplicação:
+    * - usado quando o admin escolhe "Outro valor" no menu do complemento
+    * - preserva o contexto necessário para retornar ao grupo/produto após a digitação
+    */
     
     @Column(name = "aguardando_novo_preco_complemento", nullable = false)
     private boolean aguardandoNovoPrecoComplemento = false;
@@ -357,20 +379,83 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_produto_novo_preco_complemento")
     private Integer offsetListaProdutoNovoPrecoComplemento = 0;
     
-    // =========================================================
-    // CLIENTE — Carrinho em montagem
-    // =========================================================
-    @Column(name = "id_produto_item_em_montagem")
-    private Long idProdutoItemEmMontagem;
+	// =========================================================
+	// ADMIN — Opção de tamanho (Criar por digitação)
+	// =========================================================
+	
+	@Column(name = "aguardando_nova_opcao_tamanho", nullable = false)
+	private Boolean aguardandoNovaOpcaoTamanho = false;
+	
+	@Column(name = "id_categoria_nova_opcao_tamanho")
+	private Long idCategoriaNovaOpcaoTamanho;
+	
+	@Column(name = "offset_produtos_nova_opcao_tamanho")
+	private Integer offsetProdutosNovaOpcaoTamanho = 0;
+	 
+	
+	// =========================================================
+	// ADMIN — Opção de tamanho (Descrição por digitação)
+	// =========================================================
 
-    @Column(name = "id_categoria_item_em_montagem")
-    private Long idCategoriaItemEmMontagem;
+	@Column(name = "aguardando_descricao_opcao_tamanho", nullable = false)
+	private Boolean aguardandoDescricaoOpcaoTamanho = false;
 
-    @Column(name = "quantidade_multipla_item_em_montagem")
-    private Integer quantidadeMultiplaItemEmMontagem;
+	@Column(name = "id_opcao_tamanho_nova_descricao")
+	private Long idOpcaoTamanhoNovaDescricao;
 
-    @Column(name = "ordem_grupo_complemento_item_em_montagem")
-    private Integer ordemGrupoComplementoItemEmMontagem;
+	@Column(name = "id_categoria_opcao_tamanho_nova_descricao")
+	private Long idCategoriaOpcaoTamanhoNovaDescricao;
+
+	@Column(name = "offset_produtos_opcao_tamanho_nova_descricao")
+	private Integer offsetProdutosOpcaoTamanhoNovaDescricao = 0;
+	
+	// =========================================================
+	// ADMIN — Produto x Opção de tamanho (Preço por digitação)
+	// =========================================================
+
+	@Column(name = "aguardando_novo_preco_produto_tamanho", nullable = false)
+	private Boolean aguardandoNovoPrecoProdutoTamanho = false;
+
+	@Column(name = "id_produto_novo_preco_tamanho")
+	private Long idProdutoNovoPrecoTamanho;
+
+	@Column(name = "id_categoria_novo_preco_tamanho")
+	private Long idCategoriaNovoPrecoTamanho;
+
+	@Column(name = "id_opcao_tamanho_produto_novo_preco")
+	private Long idOpcaoTamanhoProdutoNovoPreco;
+
+	@Column(name = "offset_lista_novo_preco_tamanho")
+	private Integer offsetListaNovoPrecoTamanho = 0;
+	
+	
+	// =========================================================
+	// CLIENTE — Carrinho em montagem
+	// =========================================================
+
+	@Column(name = "id_produto_item_em_montagem")
+	private Long idProdutoItemEmMontagem;
+
+	@Column(name = "id_categoria_item_em_montagem")
+	private Long idCategoriaItemEmMontagem;
+
+	@Column(name = "quantidade_multipla_item_em_montagem")
+	private Integer quantidadeMultiplaItemEmMontagem;
+
+	@Column(name = "ordem_grupo_complemento_item_em_montagem")
+	private Integer ordemGrupoComplementoItemEmMontagem;
+
+	@Column(name = "id_opcao_tamanho_produto_item_em_montagem")
+	private Long idOpcaoTamanhoProdutoItemEmMontagem;
+
+	@Column(name = "id_opcao_tamanho_item_em_montagem")
+	private Long idOpcaoTamanhoItemEmMontagem;
+
+	@Column(name = "nome_tamanho_item_em_montagem", length = 120)
+	private String nomeTamanhoItemEmMontagem;
+
+	@Column(name = "preco_tamanho_item_em_montagem", precision = 12, scale = 2)
+	private BigDecimal precoTamanhoItemEmMontagem;
     
     
     @PrePersist
@@ -420,6 +505,17 @@ public class SessaoAtendimentoWhatsapp {
             aguardandoBairrosAtendidos = false;
         }
         
+        if (aguardandoNovaOpcaoTamanho == null) {
+            aguardandoNovaOpcaoTamanho = false;
+        }
+        
+        if (aguardandoNovoPrecoProdutoTamanho == null) {
+            aguardandoNovoPrecoProdutoTamanho = false;
+        }
+        
+        if (aguardandoDescricaoOpcaoTamanho == null) {
+            aguardandoDescricaoOpcaoTamanho = false;
+        }
     }
 
     @PreUpdate

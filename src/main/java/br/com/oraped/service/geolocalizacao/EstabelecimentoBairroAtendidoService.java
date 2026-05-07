@@ -138,7 +138,7 @@ public class EstabelecimentoBairroAtendidoService {
         return repository.existsByEstabelecimentoIdAndBairroId(estabelecimento.getId(), idBairro);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public boolean isEnderecoAtendido(Estabelecimento estabelecimento, EnderecoResolvidoDTO end) {
 
         validarEstabelecimento(estabelecimento);

@@ -18,6 +18,80 @@ public class SessaoWhatsappAdminComplementoService {
 
     private final SessaoWhatsappStore sessaoStore;
 
+    //NOME
+    @Transactional
+    public void marcarAguardandoEditarNomeComplementoGlobal(
+        Long idSessao,
+        Long idGrupo,
+        Long idComplemento,
+        Integer offsetGrupos
+    ) {
+
+        if (idGrupo == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idGrupo é obrigatório");
+        }
+
+        if (idComplemento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idComplemento é obrigatório");
+        }
+
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setAguardandoEditarNomeComplementoGlobal(true);
+        sessao.setIdGrupoEditarNomeComplementoGlobal(idGrupo);
+        sessao.setIdComplementoEditarNomeGlobal(idComplemento);
+        sessao.setOffsetEditarNomeComplementoGlobal(normalizarOffset(offsetGrupos));
+
+        // Evita conflito com edição de preço do complemento.
+        limparContextoNovoPrecoComplemento(sessao);
+
+        // Evita conflito com fluxos baseados no campo genérico aguardando.
+        sessao.setAguardando(null);
+
+        sessaoStore.salvar(sessao);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isAguardandoEditarNomeComplementoGlobal(Long idSessao) {
+
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        return sessao.isAguardandoEditarNomeComplementoGlobal()
+            && sessao.getIdGrupoEditarNomeComplementoGlobal() != null
+            && sessao.getIdComplementoEditarNomeGlobal() != null;
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdGrupoEditarNomeComplementoGlobal(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdGrupoEditarNomeComplementoGlobal();
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdComplementoEditarNomeGlobal(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdComplementoEditarNomeGlobal();
+    }
+
+    @Transactional(readOnly = true)
+    public int getOffsetEditarNomeComplementoGlobal(Long idSessao) {
+
+        Integer offset = sessaoStore.buscarPorId(idSessao).getOffsetEditarNomeComplementoGlobal();
+        return normalizarOffset(offset);
+    }
+
+    @Transactional
+    public void limparAguardandoEditarNomeComplementoGlobal(Long idSessao) {
+
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setAguardandoEditarNomeComplementoGlobal(false);
+        sessao.setIdGrupoEditarNomeComplementoGlobal(null);
+        sessao.setIdComplementoEditarNomeGlobal(null);
+        sessao.setOffsetEditarNomeComplementoGlobal(0);
+
+        sessaoStore.salvar(sessao);
+    }
+    
+    //PREÇOS
     @Transactional
     public void marcarAguardandoNovoPrecoComplemento(
         Long idSessao,
@@ -99,5 +173,16 @@ public class SessaoWhatsappAdminComplementoService {
 
     private Integer normalizarOffset(Integer offset) {
         return offset == null ? 0 : Math.max(0, offset);
+    }
+    
+    
+    private void limparContextoNovoPrecoComplemento(SessaoAtendimentoWhatsapp sessao) {
+
+        sessao.setAguardandoNovoPrecoComplemento(false);
+        sessao.setIdProdutoNovoPrecoComplemento(null);
+        sessao.setIdCategoriaNovoPrecoComplemento(null);
+        sessao.setIdGrupoNovoPrecoComplemento(null);
+        sessao.setIdComplementoNovoPreco(null);
+        sessao.setOffsetListaProdutoNovoPrecoComplemento(0);
     }
 }

@@ -10,13 +10,13 @@ import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.produto.CategoriaProduto;
-import br.com.oraped.domain.produto.GrupoComplemento;
-import br.com.oraped.dto.produto.ComplementoResponseDTO;
-import br.com.oraped.dto.produto.GrupoComplementoCategoriaProdutoResponseDTO;
-import br.com.oraped.dto.produto.GrupoComplementoResponseDTO;
+import br.com.oraped.domain.produto.complemento.GrupoComplemento;
+import br.com.oraped.dto.produto.complemento.ComplementoResponseDTO;
+import br.com.oraped.dto.produto.complemento.GrupoComplementoCategoriaProdutoResponseDTO;
+import br.com.oraped.dto.produto.complemento.GrupoComplementoResponseDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.repository.produto.CategoriaProdutoRepository;
-import br.com.oraped.service.produto.GrupoComplementoService;
+import br.com.oraped.service.produto.complemento.GrupoComplementoService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdminWhatsappUiHelper;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
 import lombok.RequiredArgsConstructor;
@@ -138,32 +138,45 @@ public class AdminComplementoCategoriaService {
                 resumo + "\n\n" +
                 "O que deseja fazer?";
 
+        
+        List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
+
+        if (!associados.isEmpty()) {
+            itens.add(uiHelper.row(
+                "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
+                "Complementos associados",
+                "Grupos aplicados à categoria"
+            ));
+        }
+
+        itens.add(uiHelper.row(
+            "COMANDO|ADMIN_CAT_COMP_ASSOCIAR_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
+            "Associar existentes",
+            "Associar grupos já cadastrados"
+        ));
+
+        itens.add(uiHelper.row(
+            "COMANDO|ADMIN_COMP_GRUPO_NOVO_MENU|0",
+            "➕ Novos complementos",
+            "Criar grupo de complementos"
+        ));
+
+        itens.add(uiHelper.row(
+            "COMANDO|ADMIN_CAT_COMP_CATEGORIAS|" + normalizarOffset(offsetCategorias),
+            "⬅️ Voltar",
+            "Categorias"
+        ));
+        
         return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_cat_comp_menu",
-            uiHelper.msg().lista(
-                whatsappAdmin,
-                uiHelper.msg().truncWord(corpo, 1024),
-                "Complementos",
-                "Opções",
-                List.of(
-                    uiHelper.row(
-                        "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-                        "Já associados",
-                        "Complementos associados à " + categoria.getNome()
-                    ),
-                    uiHelper.row(
-                        "COMANDO|ADMIN_CAT_COMP_ASSOCIAR_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-                        "Associar novos",
-                        "Associar outros complementos cadastrados"
-                    ),
-                    uiHelper.row(
-                        "COMANDO|ADMIN_CAT_COMP_CATEGORIAS|" + normalizarOffset(offsetCategorias),
-                        "⬅️ Voltar",
-                        "Categorias"
-                    )
-                )
-            )
-        );
+    	    "admin_cat_comp_menu",
+    	    uiHelper.msg().lista(
+    	        whatsappAdmin,
+    	        uiHelper.msg().truncWord(corpo, 1024),
+    	        "Complementos",
+    	        "Opções",
+    	        itens
+    	    )
+    	);
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin listarGruposAssociadosCategoria(
@@ -316,9 +329,11 @@ public class AdminComplementoCategoriaService {
         boolean temMais = endExclusive < disponiveis.size();
 
         String corpo =
-            "🧩 *Associar grupo à categoria*\n\n" +
-                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-                "Escolha o grupo que será herdado pelos produtos desta categoria.";
+    	    "🧩 *Associar grupo à categoria*\n\n" +
+	        "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
+	        "*Como funciona?*\n" +
+	        "Ao associar um grupo de complementos, *todos os produtos da categoria " + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) +"* passam a oferecer automaticamente os complementos contidos no grupo.\n\n" +
+	        "Escolha o grupo que deseja aplicar.";
 
         List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
 

@@ -3,7 +3,7 @@ package br.com.oraped.domain.carrinho;
 import java.math.BigDecimal;
 
 import br.com.oraped.domain.BaseEntity;
-import br.com.oraped.domain.produto.Complemento;
+import br.com.oraped.domain.produto.complemento.Complemento;
 import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

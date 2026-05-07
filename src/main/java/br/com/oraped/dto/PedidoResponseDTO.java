@@ -2,9 +2,9 @@ package br.com.oraped.dto;
 
 import java.math.BigDecimal;
 
-import br.com.oraped.domain.Pedido;
 import br.com.oraped.domain.enums.StatusPedido;
 import br.com.oraped.domain.enums.TipoAtendimento;
+import br.com.oraped.domain.pedido.Pedido;
 import lombok.Getter;
 import lombok.Setter;
 

@@ -23,7 +23,7 @@ import lombok.RequiredArgsConstructor;
  * Concentrar as operações do carrinho temporário antes da criação do pedido.
  *
  * Aplicação:
- * Usado pelo fluxo do cliente para armazenar produtos e complementos selecionados
+ * Usado pelo fluxo do cliente para armazenar produtos, tamanhos e complementos selecionados
  * durante a conversa no WhatsApp.
  *
  * Utilização:
@@ -55,12 +55,27 @@ public class CarrinhoService {
         }
 
         Carrinho carrinho = obterOuCriar(idSessao);
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
 
         ItemCarrinho item = new ItemCarrinho();
         item.setCarrinho(carrinho);
         item.setProduto(produto);
         item.setQuantidade(qtd);
         item.setObservacoes(null);
+
+        // Produto com tamanho usa o preço final escolhido na montagem; sem tamanho, usa o preço atual do produto.
+        item.setIdOpcaoTamanhoProduto(sessao.getIdOpcaoTamanhoProdutoItemEmMontagem());
+        item.setIdOpcaoTamanho(sessao.getIdOpcaoTamanhoItemEmMontagem());
+        item.setNomeTamanho(sessao.getNomeTamanhoItemEmMontagem());
+        item.setPrecoUnitario(
+            sessao.getPrecoTamanhoItemEmMontagem() == null
+                ? produto.getPreco()
+                : sessao.getPrecoTamanhoItemEmMontagem()
+        );
+
+        if (item.getPrecoUnitario() == null) {
+            item.setPrecoUnitario(BigDecimal.ZERO);
+        }
 
         if (complementosEmMontagem != null) {
             for (ComplementoItemCarrinhoEmMontagem complementoMontagem : complementosEmMontagem) {

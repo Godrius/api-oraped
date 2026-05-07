@@ -29,7 +29,7 @@ import br.com.oraped.repository.NotificacaoAberturaEstabelecimentoRepository;
 import br.com.oraped.repository.marketplace.CategoriaMarketplaceRepository;
 import br.com.oraped.repository.marketplace.MarketplaceRepository;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
-import br.com.oraped.service.whatsapp.orquestrador.OrquestradorCarrinhoService;
+import br.com.oraped.service.whatsapp.cliente.CarrinhoClienteService;
 import br.com.oraped.service.whatsapp.sessao.SessaoAtendimentoWhatsappService;
 import lombok.RequiredArgsConstructor;
 
@@ -40,7 +40,7 @@ public class EstabelecimentoService {
     private final EstabelecimentoRepository estabelecimentoRepository;
 
     private final SessaoAtendimentoWhatsappService sessaoService;
-    private final OrquestradorCarrinhoService carrinhoService;
+    private final CarrinhoClienteService carrinhoService;
 
     private final NotificacaoAberturaEstabelecimentoRepository notificacaoAberturaRepository;
     private final OrazzaWhatsappCallbackClient orazzaWhatsappCallbackClient;

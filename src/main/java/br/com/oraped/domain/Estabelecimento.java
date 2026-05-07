@@ -90,7 +90,7 @@ public class Estabelecimento extends BaseEntity {
     private BigDecimal valorPedidoMinimo;
         
     // Classificação principal do estabelecimento no marketplace.
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(optional = false)
     @JoinColumn(name = "categoria_marketplace_id", nullable = false)
     private CategoriaMarketplace categoriaMarketplace;
 

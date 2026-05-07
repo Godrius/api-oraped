@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import br.com.oraped.domain.BaseEntity;
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.produto.complemento.GrupoComplementoCategoriaProduto;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

@@ -13,21 +13,27 @@ import br.com.oraped.dto.whatsapp.entrada.MensagemWhatsappEntradaDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.service.EstabelecimentoService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
-import br.com.oraped.service.whatsapp.administrador.AdminCardapioService;
+import br.com.oraped.service.whatsapp.administrador.AdminCategoriaService;
 import br.com.oraped.service.whatsapp.administrador.AdminEntregaService;
 import br.com.oraped.service.whatsapp.administrador.AdminGrupoComplementoService;
 import br.com.oraped.service.whatsapp.administrador.AdminMarcaService;
 import br.com.oraped.service.whatsapp.administrador.AdminProdutoService;
+import br.com.oraped.service.whatsapp.administrador.AdminTamanhoService;
 import br.com.oraped.service.whatsapp.administrador.MenuAdminService;
 import br.com.oraped.service.whatsapp.administrador.ValidadorAdminService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
+import br.com.oraped.service.whatsapp.cliente.MenuClienteService;
+import br.com.oraped.service.whatsapp.cliente.PedidoClienteService;
+import br.com.oraped.service.whatsapp.cliente.RevisaoPedidoClienteService;
 import br.com.oraped.service.whatsapp.orquestrador.marketplace.OrquestradorFluxoMarketplaceService;
 import br.com.oraped.service.whatsapp.sessao.SessaoAtendimentoWhatsappService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminCategoriaService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminComplementoService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminEntregaService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminGrupoComplementoService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminMarcaService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminProdutoService;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminTamanhoService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappClienteService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappMarketplaceService;
 import lombok.RequiredArgsConstructor;
@@ -55,7 +61,8 @@ public class OrquestradorTextoLivreService {
     private final AdminMarcaService adminMarcaService;
     private final ValidadorAdminService validadorAdminService;
     private final AdminGrupoComplementoService adminGrupoComplementoService;
-    private final AdminCardapioService adminCardapioService;
+    private final AdminCategoriaService adminCategoriaService;
+    private final AdminTamanhoService adminTamanhoService;
     
     private final EstabelecimentoService estabelecimentoService;
 
@@ -63,15 +70,17 @@ public class OrquestradorTextoLivreService {
     private final SessaoWhatsappClienteService sessaoClienteService;
     private final SessaoWhatsappMarketplaceService sessaoMarketplaceService;
     private final SessaoWhatsappAdminProdutoService sessaoAdminProdutoService;
+    private final SessaoWhatsappAdminTamanhoService sessaoAdminTamanhoService;
+    private final SessaoWhatsappAdminCategoriaService sessaoAdminCategoriaService;
     private final SessaoWhatsappAdminMarcaService sessaoAdminMarcaService;
     private final SessaoWhatsappAdminEntregaService sessaoAdminEntregaService;
     private final SessaoWhatsappAdminGrupoComplementoService sessaoAdminGrupoComplementoService;
     private final SessaoWhatsappAdminComplementoService sessaoAdminComplementoService;
     
     private final OrquestradorRegistroMensagemService registroMensagemService;
-    private final OrquestradorRevisaoPedidoService revisaoPedidoService;
-    private final OrquestradorMenuClienteService menusClienteService;
-    private final OrquestradorFluxoClienteService fluxoClienteService;
+    private final RevisaoPedidoClienteService revisaoPedidoService;
+    private final MenuClienteService menusClienteService;
+    private final PedidoClienteService fluxoClienteService;
     private final OrquestradorParseService parse;
     private final OrquestradorMensagemHelperService mensagemHelper;
 
@@ -226,6 +235,18 @@ public class OrquestradorTextoLivreService {
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 
+	        if (sessaoAdminComplementoService.isAguardandoEditarNomeComplementoGlobal(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminGrupoComplementoService.concluirAlteracaoNomeComplementoGlobalPorDigitacao(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
 	        if (sessaoAdminComplementoService.isAguardandoNovoPrecoComplemento(idSessao)) {
 	            var r = adminGrupoComplementoService.concluirPrecoManualComplementoGlobalPorDigitacao(
 	                estabelecimento,
@@ -264,7 +285,19 @@ public class OrquestradorTextoLivreService {
 
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
+	        
+	        if (sessaoAdminTamanhoService.isAguardandoNovoPrecoProdutoTamanho(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	            	adminTamanhoService.concluirAlteracaoPrecoTamanhoProduto(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
 
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
 	        if (sessaoAdminProdutoService.isAguardandoNovoPreco(idSessao)) {
 	            AdministradorWhatsappResultados.ResultadoAdminPreco r =
 	                adminProdutoService.concluirPrecoManualProdutoPorDigitacao(
@@ -457,13 +490,41 @@ public class OrquestradorTextoLivreService {
 	            return new RoteamentoResultado(r.chave, r.mensagem, List.of(listaAtualizada, navegacao));
 	        }
 	        
-	        
-	        // -----------------------------------------------------
-	        // 3.5) ADMIN: CATEGORIAS E PRODUTOS
-	        // -----------------------------------------------------
-	        if (sessaoAdminProdutoService.isAguardandoNovaCategoria(idSessao)) {
+		    // -----------------------------------------------------
+		    // 3.5) ADMIN: TAMANHOS
+		    // -----------------------------------------------------
+	        if (sessaoAdminTamanhoService.isAguardandoDescricaoOpcaoTamanho(idSessao)) {
 	            AdministradorWhatsappResultados.ResultadoAdmin r =
-	                adminCardapioService.concluirCadastroCategoriaPorDigitacao(
+	            	adminTamanhoService.concluirAlteracaoDescricaoOpcaoTamanho(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
+	        if (sessaoAdminTamanhoService.isAguardandoNovaOpcaoTamanho(idSessao)) {
+	        	AdministradorWhatsappResultados.ResultadoAdmin r =
+	        		adminTamanhoService.concluirCadastroOpcaoTamanho(
+	        			estabelecimento,
+		                whatsappCliente,
+		                idSessao,
+		                parse.safeTextoEntrada(req)
+		            );
+	
+		        return new RoteamentoResultado(r.chave, r.mensagem);
+		    }
+		     
+		     
+		     
+		    // -----------------------------------------------------
+		    // 3.6) ADMIN: CATEGORIAS E PRODUTOS
+		    // -----------------------------------------------------
+	        if (sessaoAdminCategoriaService.isAguardandoNovaCategoria(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	            	adminCategoriaService.concluirCadastroCategoriaPorDigitacao(
 	                    estabelecimento,
 	                    whatsappCliente,
 	                    idSessao,
@@ -484,6 +545,8 @@ public class OrquestradorTextoLivreService {
 
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
+	        
+	        
 	    }
 
 	    // =========================================================
@@ -675,13 +738,21 @@ public class OrquestradorTextoLivreService {
         sessaoAdminProdutoService.limparAguardandoNovoNomeProduto(idSessao);
         sessaoAdminProdutoService.limparAguardandoNovaDescricaoProduto(idSessao);
         sessaoAdminProdutoService.limparAguardandoNovaFotoProduto(idSessao);
-        sessaoAdminProdutoService.limparAguardandoNovaCategoria(idSessao);
         sessaoAdminProdutoService.limparAguardandoNovoProduto(idSessao);
-
+        
+        sessaoAdminTamanhoService.limparAguardandoNovaOpcaoTamanho(idSessao);
+        sessaoAdminTamanhoService.limparAguardandoDescricaoOpcaoTamanho(idSessao);
+        sessaoAdminTamanhoService.limparAguardandoNovoPrecoProdutoTamanho(idSessao);
+        sessaoAdminTamanhoService.limparAguardandoNovoPrecoProdutoTamanho(idSessao);
+        
+        sessaoAdminCategoriaService.limparAguardandoNovaCategoria(idSessao);
+        
+        sessaoAdminComplementoService.limparAguardandoEditarNomeComplementoGlobal(idSessao);
         sessaoAdminComplementoService.limparAguardandoNovoPrecoComplemento(idSessao);
 
         sessaoAdminEntregaService.limparAguardandoCepEstabelecimento(idSessao);
         sessaoAdminEntregaService.limparAguardandoTaxaEntregaBairro(idSessao);
         sessaoAdminEntregaService.limparAguardandoTaxaEntregaPadrao(idSessao);
+        
     }
 }

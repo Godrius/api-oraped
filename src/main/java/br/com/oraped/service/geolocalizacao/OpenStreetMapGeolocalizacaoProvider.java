@@ -170,7 +170,7 @@ public class OpenStreetMapGeolocalizacaoProvider implements GeolocalizacaoProvid
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "latitude/longitude são obrigatórios");
         }
 
-        int lim = (limite <= 0) ? 40 : Math.min(limite, 50);
+        int lim = (limite <= 0) ? 60 : Math.min(limite, 100);
 
         OverpassResponse resp = consultarOverpassBairros(latitude, longitude, OVERPASS_RAIO_METROS_PADRAO);
 
