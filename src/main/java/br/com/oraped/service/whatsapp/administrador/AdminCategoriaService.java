@@ -41,8 +41,8 @@ import lombok.RequiredArgsConstructor;
 public class AdminCategoriaService {
 
     private static final int LIST_MAX_ROWS = 10;
-    private static final int LIST_PAGE_SIZE_WITH_PAGINATION = 8;
-    private static final int LIST_PAGE_SIZE_WITHOUT_PAGINATION = 9;
+    private static final int LIST_PAGE_SIZE_WITH_PAGINATION = 7;
+    private static final int LIST_PAGE_SIZE_WITHOUT_PAGINATION = 8;
 
     private final ProdutoService produtoService;
     private final CategoriaProdutoService categoriaProdutoService;
@@ -113,6 +113,12 @@ public class AdminCategoriaService {
 
         List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
 
+        itens.add(uiHelper.row(
+    	    "COMANDO|ADMIN_CATEGORIA_NOVA_MENU|" + safeOffset,
+    	    "➕ Nova categoria",
+    	    "Cadastrar categoria"
+    	));
+        
         for (CategoriaProduto categoria : page) {
             int quantidadeProdutos = contarProdutosDaCategoria(estabelecimento, categoria.getId());
 
@@ -176,9 +182,15 @@ public class AdminCategoriaService {
 	    int totalProdutos = contarProdutosDaCategoria(estabelecimento, idCategoria);
 	    String nomeCategoria = uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80);
 
-	    String descricaoProdutos = totalProdutos == 1
-	        ? "1 produto cadastrado"
-	        : totalProdutos + " produtos cadastrados";
+	    String descricaoProdutos;
+
+	    if (totalProdutos <= 0) {
+	        descricaoProdutos = "Nenhum produto cadastrado";
+	    } else if (totalProdutos == 1) {
+	        descricaoProdutos = "1 produto cadastrado";
+	    } else {
+	        descricaoProdutos = totalProdutos + " produtos cadastrados";
+	    }
 
 	    String cabecalho =
 	        "🧾 *" + nomeCategoria + "*\n\n" +
@@ -215,7 +227,7 @@ public class AdminCategoriaService {
 	        uiHelper.msg().lista(
 	            whatsappAdmin,
 	            uiHelper.msg().truncWord(cabecalho, 1024),
-	            "Opções",
+	            nomeCategoria,
 	            "Categoria",
 	            itens
 	        )
@@ -226,53 +238,105 @@ public class AdminCategoriaService {
 	    Estabelecimento estabelecimento,
 	    String whatsappAdmin,
 	    Long idCategoria,
-	    Integer offset
+	    Integer offset,
+	    String mensagemCabecalho
 	) {
 
 	    uiHelper.validarBasico(estabelecimento, whatsappAdmin);
+
 	    validarIdCategoria(idCategoria);
 
 	    int safeOffset = normalizarOffset(offset);
 
-	    CategoriaProduto categoria = categoriaProdutoService.buscar(idCategoria, estabelecimento.getId());
-	    validarCategoriaDoEstabelecimento(estabelecimento, categoria);
-
-	    boolean categoriaUsaGrade = gradeTamanhoService.categoriaPossuiGradeAtiva(categoria.getId());
-
-	    List<Produto> produtos = produtoService.listarPorEstabelecimentoECategoria(
-	        estabelecimento.getId(),
-	        idCategoria
+	    CategoriaProduto categoria = categoriaProdutoService.buscar(
+	        idCategoria,
+	        estabelecimento.getId()
 	    );
+
+	    validarCategoriaDoEstabelecimento(
+	        estabelecimento,
+	        categoria
+	    );
+
+	    boolean categoriaUsaGrade =
+	        gradeTamanhoService.categoriaPossuiGradeAtiva(
+	            categoria.getId()
+	        );
+
+	    List<Produto> produtos =
+	        produtoService.listarPorEstabelecimentoECategoria(
+	            estabelecimento.getId(),
+	            idCategoria
+	        );
 
 	    if (produtos == null) {
 	        produtos = List.of();
 	    }
 
 	    List<Produto> ordenados = produtos.stream()
-	        .filter(Objects::nonNull)
-	        .sorted(Comparator.comparing(p -> uiHelper.msg().safe(p.getNome()), String.CASE_INSENSITIVE_ORDER))
-	        .collect(Collectors.toList());
+    	    .filter(Objects::nonNull)
+
+    	    // Produtos removidos logicamente não devem aparecer no cardápio administrativo.
+    	    .filter(produto -> !produto.isExcluido())
+
+    	    .sorted(
+    	        Comparator.comparing(
+    	            p -> uiHelper.msg().safe(p.getNome()),
+    	            String.CASE_INSENSITIVE_ORDER
+    	        )
+    	    )
+    	    .collect(Collectors.toList());
 
 	    int total = ordenados.size();
 
 	    if (total == 0) {
-	        String corpo =
-	            "📦 *Produtos da categoria*\n\n" +
-	                "*" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-	                "Nenhum produto foi encontrado nesta categoria.";
+
+	        StringBuilder corpo = new StringBuilder();
+
+	        // Permite reutilizar a listagem exibindo feedbacks acima do conteúdo.
+	        if (StringUtils.hasText(mensagemCabecalho)) {
+	            corpo.append(
+	                uiHelper.msg().trunc(
+	                    mensagemCabecalho.trim(),
+	                    400
+	                )
+	            ).append("\n\n");
+	        }
+
+	        corpo.append(
+	            "📦 *Produtos da categoria*\n\n"
+	        ).append(
+	            "*"
+	        ).append(
+	            uiHelper.msg().trunc(
+	                uiHelper.msg().safe(categoria.getNome()),
+	                80
+	            )
+	        ).append(
+	            "*\n\n"
+	        ).append(
+	            "Esta categoria ainda não possui produtos."
+	        );
 
 	        return new AdministradorWhatsappResultados.ResultadoAdmin(
 	            "admin_cardapio_categoria_produtos_vazio",
 	            uiHelper.msg().botoes(
 	                whatsappAdmin,
-	                uiHelper.msg().trunc(corpo, 1024),
+	                uiHelper.msg().trunc(
+	                    corpo.toString(),
+	                    1024
+	                ),
 	                List.of(
 	                    uiHelper.btn(
-	                        "COMANDO|ADMIN_PRODUTO_NOVO_MENU|" + idCategoria + "|" + safeOffset,
+	                        "COMANDO|ADMIN_PRODUTO_NOVO_MENU|" +
+	                            idCategoria + "|" +
+	                            safeOffset,
 	                        "➕ Novo produto"
 	                    ),
 	                    uiHelper.btn(
-	                        "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_MENU|" + idCategoria + "|" + safeOffset,
+	                        "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_MENU|" +
+	                            idCategoria + "|" +
+	                            safeOffset,
 	                        "⬅️ Voltar"
 	                    )
 	                )
@@ -285,52 +349,119 @@ public class AdminCategoriaService {
 	    }
 
 	    int pageSize = calcularPageSize(total);
-	    int paginasTotal = calcularTotalPaginas(total, pageSize);
+
+	    int paginasTotal = calcularTotalPaginas(
+	        total,
+	        pageSize
+	    );
+
 	    int paginaAtual = (safeOffset / pageSize) + 1;
 
-	    int endExclusive = Math.min(safeOffset + pageSize, total);
-	    List<Produto> page = ordenados.subList(safeOffset, endExclusive);
+	    int endExclusive = Math.min(
+	        safeOffset + pageSize,
+	        total
+	    );
+
+	    List<Produto> page = ordenados.subList(
+	        safeOffset,
+	        endExclusive
+	    );
+
 	    boolean temMais = endExclusive < total;
 
-	    String cabecalho =
-	        "📦 *Produtos - " + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 60) + "*\n" +
-	            montarLabelPagina(paginaAtual, paginasTotal);
+	    StringBuilder cabecalho = new StringBuilder();
 
-	    List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
+	    // Permite reutilizar a listagem exibindo feedbacks acima do conteúdo.
+	    if (StringUtils.hasText(mensagemCabecalho)) {
+	        cabecalho.append(
+	            uiHelper.msg().trunc(
+	                mensagemCabecalho.trim(),
+	                400
+	            )
+	        ).append("\n\n");
+	    }
+
+	    cabecalho
+	        .append("📦 *Produtos - ")
+	        .append(
+	            uiHelper.msg().trunc(
+	                uiHelper.msg().safe(categoria.getNome()),
+	                60
+	            )
+	        )
+	        .append("*\n")
+	        .append(
+	            montarLabelPagina(
+	                paginaAtual,
+	                paginasTotal
+	            )
+	        );
+
+	    List<MensagemInterativaItemListaWhatsappDTO> itens =
+	        new ArrayList<>();
 
 	    for (Produto produto : page) {
-	        itens.add(uiHelper.row(
-	            montarComandoVoltarProduto(produto.getId(), idCategoria, safeOffset),
-	            uiHelper.msg().trunc(uiHelper.msg().safe(produto.getNome()), 24),
-	            montarDescricaoProdutoLista(produto, categoriaUsaGrade)
-	        ));
+
+	        itens.add(
+	            uiHelper.row(
+	                montarComandoVoltarProduto(
+	                    produto.getId(),
+	                    idCategoria,
+	                    safeOffset
+	                ),
+	                uiHelper.msg().trunc(
+	                    uiHelper.msg().safe(produto.getNome()),
+	                    24
+	                ),
+	                montarDescricaoProdutoLista(
+	                    produto,
+	                    categoriaUsaGrade
+	                )
+	            )
+	        );
 	    }
 
 	    if (temMais) {
-	        itens.add(uiHelper.row(
-	            "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_LISTA|" + idCategoria + "|" + endExclusive,
-	            "➡️ Mais produtos",
-	            "Ver próxima página"
-	        ));
+
+	        itens.add(
+	            uiHelper.row(
+	                "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_LISTA|" +
+	                    idCategoria + "|" +
+	                    endExclusive,
+	                "➡️ Mais produtos",
+	                "Ver próxima página"
+	            )
+	        );
 	    }
 
-	    itens.add(uiHelper.row(
-	        "COMANDO|ADMIN_PRODUTO_NOVO_MENU|" + idCategoria + "|" + safeOffset,
-	        "➕ Novo produto",
-	        "Cadastrar nesta categoria"
-	    ));
+	    itens.add(
+	        uiHelper.row(
+	            "COMANDO|ADMIN_PRODUTO_NOVO_MENU|" +
+	                idCategoria + "|" +
+	                safeOffset,
+	            "➕ Novo produto",
+	            "Cadastrar nesta categoria"
+	        )
+	    );
 
-	    itens.add(uiHelper.row(
-	        "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_MENU|" + idCategoria + "|" + safeOffset,
-	        "⬅️ Voltar",
-	        "Menu da categoria"
-	    ));
+	    itens.add(
+	        uiHelper.row(
+	            "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_MENU|" +
+	                idCategoria + "|" +
+	                safeOffset,
+	            "⬅️ Voltar",
+	            "Menu da categoria"
+	        )
+	    );
 
 	    return new AdministradorWhatsappResultados.ResultadoAdmin(
 	        "admin_cardapio_categoria_produtos_lista",
 	        uiHelper.msg().lista(
 	            whatsappAdmin,
-	            uiHelper.msg().truncWord(cabecalho, 1024),
+	            uiHelper.msg().truncWord(
+	                cabecalho.toString(),
+	                1024
+	            ),
 	            "Produtos",
 	            "Produtos",
 	            itens
@@ -672,15 +803,24 @@ public class AdminCategoriaService {
             : "Página 1";
     }
 
-    private int contarProdutosDaCategoria(Estabelecimento estabelecimento, Long idCategoria) {
+    private int contarProdutosDaCategoria(
+	    Estabelecimento estabelecimento,
+	    Long idCategoria
+	) {
 
-        return produtoService.listar(
-            estabelecimento.getId(),
-            idCategoria,
-            null,
-            false
-        ).size();
-    }
+	    return (int) produtoService
+	        .listarPorEstabelecimentoECategoria(
+	            estabelecimento.getId(),
+	            idCategoria
+	        )
+	        .stream()
+	        .filter(Objects::nonNull)
+
+	        // Produtos excluídos logicamente não entram nas métricas exibidas.
+	        .filter(produto -> !produto.isExcluido())
+
+	        .count();
+	}
 
     private void validarIdCategoria(Long idCategoria) {
 

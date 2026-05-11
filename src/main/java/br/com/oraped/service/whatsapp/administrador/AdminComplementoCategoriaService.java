@@ -1,44 +1,56 @@
 package br.com.oraped.service.whatsapp.administrador;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.produto.CategoriaProduto;
-import br.com.oraped.domain.produto.complemento.GrupoComplemento;
+import br.com.oraped.dto.produto.complemento.ComplementoRequestDTO;
 import br.com.oraped.dto.produto.complemento.ComplementoResponseDTO;
-import br.com.oraped.dto.produto.complemento.GrupoComplementoCategoriaProdutoResponseDTO;
+import br.com.oraped.dto.produto.complemento.GrupoComplementoRequestDTO;
 import br.com.oraped.dto.produto.complemento.GrupoComplementoResponseDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.repository.produto.CategoriaProdutoRepository;
 import br.com.oraped.service.produto.complemento.GrupoComplementoService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdminWhatsappUiHelper;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
+import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminComplementoService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Serviço administrativo para associação de grupos de complementos às categorias de produtos.
+ * Serviço administrativo para grupos de complementos das categorias.
  *
  * Aplicação:
- * - permite definir complementos herdados por todos os produtos de uma categoria
- * - reduz a necessidade de configurar grupos produto por produto
- * - mantém a associação direta no produto para exceções futuras
+ * - permite criar e gerenciar grupos de complementos próprios de uma categoria
+ * - os grupos criados aqui são herdados pelos produtos da categoria
+ * - não reutiliza grupos de outras categorias ou produtos
  */
 @Service
 @RequiredArgsConstructor
 public class AdminComplementoCategoriaService {
 
+	private record ComplementoCategoriaAdmin(
+	    Long idGrupo,
+	    ComplementoResponseDTO complemento
+	) {
+	}
+	
     private static final int LIST_MAX_ROWS = 10;
 
     private final CategoriaProdutoRepository categoriaProdutoRepository;
-    private final GrupoComplementoService grupoComplementoService;
     private final AdminWhatsappUiHelper uiHelper;
-
+    
+    private final GrupoComplementoService grupoComplementoService;
+    private final SessaoWhatsappAdminComplementoService sessaoAdminComplementoService;
+    
     public AdministradorWhatsappResultados.ResultadoAdmin listarCategoriasParaComplementos(
         Estabelecimento estabelecimento,
         String whatsappAdmin,
@@ -115,477 +127,99 @@ public class AdminComplementoCategoriaService {
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin montarMenuComplementosCategoria(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idCategoria,
-        Integer offsetCategorias
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-
-        List<GrupoComplementoCategoriaProdutoResponseDTO> associados =
-            grupoComplementoService.listarGruposDaCategoriaProduto(idCategoria, true);
-
-        String resumo = associados.isEmpty()
-            ? "Nenhum grupo associado."
-            : associados.size() == 1
-                ? "1 grupo associado."
-                : associados.size() + " grupos associados.";
-
-        String corpo =
-            "🧩 *Complementos da categoria*\n\n" +
-                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-                resumo + "\n\n" +
-                "O que deseja fazer?";
-
-        
-        List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
-
-        if (!associados.isEmpty()) {
-            itens.add(uiHelper.row(
-                "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-                "Complementos associados",
-                "Grupos aplicados à categoria"
-            ));
-        }
-
-        itens.add(uiHelper.row(
-            "COMANDO|ADMIN_CAT_COMP_ASSOCIAR_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-            "Associar existentes",
-            "Associar grupos já cadastrados"
-        ));
-
-        itens.add(uiHelper.row(
-            "COMANDO|ADMIN_COMP_GRUPO_NOVO_MENU|0",
-            "➕ Novos complementos",
-            "Criar grupo de complementos"
-        ));
-
-        itens.add(uiHelper.row(
-            "COMANDO|ADMIN_CAT_COMP_CATEGORIAS|" + normalizarOffset(offsetCategorias),
-            "⬅️ Voltar",
-            "Categorias"
-        ));
-        
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-    	    "admin_cat_comp_menu",
-    	    uiHelper.msg().lista(
-    	        whatsappAdmin,
-    	        uiHelper.msg().truncWord(corpo, 1024),
-    	        "Complementos",
-    	        "Opções",
-    	        itens
-    	    )
-    	);
-    }
-
-    public AdministradorWhatsappResultados.ResultadoAdmin listarGruposAssociadosCategoria(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idCategoria,
-        Integer offsetCategorias,
-        Integer offsetGrupos
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-
-        List<GrupoComplementoCategoriaProdutoResponseDTO> associados =
-            grupoComplementoService.listarGruposDaCategoriaProduto(idCategoria, true);
-
-        if (associados.isEmpty()) {
-            String corpo =
-                "🧩 *Grupos associados à categoria*\n\n" +
-                    "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-                    "Esta categoria ainda não possui grupos de complementos associados.";
-
-            return new AdministradorWhatsappResultados.ResultadoAdmin(
-                "admin_cat_comp_associados_vazio",
-                uiHelper.msg().botoes(
-                    whatsappAdmin,
-                    uiHelper.msg().trunc(corpo, 1024),
-                    List.of(
-                        uiHelper.btn(
-                            "COMANDO|ADMIN_CAT_COMP_ASSOCIAR_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-                            "➕ Associar"
-                        ),
-                        uiHelper.btn(
-                            "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
-                            "⬅️ Voltar"
-                        )
-                    )
-                )
-            );
-        }
-
-        int safeOffset = normalizarOffset(offsetGrupos);
-        if (safeOffset >= associados.size()) {
-            safeOffset = 0;
-        }
-
-        int pageSize = associados.size() > LIST_MAX_ROWS ? 8 : 9;
-        int endExclusive = Math.min(safeOffset + pageSize, associados.size());
-        List<GrupoComplementoCategoriaProdutoResponseDTO> page = associados.subList(safeOffset, endExclusive);
-        boolean temMais = endExclusive < associados.size();
-
-        String corpo =
-            "🧩 *Grupos associados à categoria*\n\n" +
-                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-                "Escolha um grupo para gerenciar.";
-
-        List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
-
-        for (GrupoComplementoCategoriaProdutoResponseDTO item : page) {
-            itens.add(uiHelper.row(
-                "COMANDO|ADMIN_CAT_COMP_GRUPO_DETALHE|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + item.getIdGrupo(),
-                uiHelper.msg().trunc(item.getNomeGrupo(), 24),
-                item.getQuantidadeComplementos() == 1
-                    ? "1 item extra"
-                    : item.getQuantidadeComplementos() + " itens extras"
-            ));
-        }
-
-        if (temMais) {
-            itens.add(uiHelper.row(
-                "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + endExclusive,
-                "➡️ Mais grupos",
-                "Ver próxima página"
-            ));
-        }
-
-        itens.add(uiHelper.row(
-            "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
-            "⬅️ Voltar",
-            "Complementos da categoria"
-        ));
-
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_cat_comp_associados",
-            uiHelper.msg().lista(
-                whatsappAdmin,
-                uiHelper.msg().truncWord(corpo, 1024),
-                "Grupos",
-                "Grupos",
-                itens
-            )
-        );
-    }
-
-    public AdministradorWhatsappResultados.ResultadoAdmin listarGruposDisponiveisParaCategoria(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idCategoria,
-        Integer offsetCategorias,
-        Integer offsetGrupos
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-
-        List<GrupoComplementoResponseDTO> todosAtivos =
-            grupoComplementoService.listarGrupos(estabelecimento.getId(), true);
-
-        List<GrupoComplementoCategoriaProdutoResponseDTO> associados =
-            grupoComplementoService.listarGruposDaCategoriaProduto(idCategoria, false);
-
-        List<Long> idsAssociadosAtivos = associados.stream()
-            .filter(GrupoComplementoCategoriaProdutoResponseDTO::isAtivo)
-            .map(GrupoComplementoCategoriaProdutoResponseDTO::getIdGrupo)
-            .filter(Objects::nonNull)
-            .toList();
-
-        List<GrupoComplementoResponseDTO> disponiveis = todosAtivos.stream()
-            .filter(grupo -> !idsAssociadosAtivos.contains(grupo.getId()))
-            .toList();
-
-        if (disponiveis.isEmpty()) {
-            String corpo =
-                "🧩 *Associar grupo à categoria*\n\n" +
-                    "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-                    "Não há grupos disponíveis para associação.";
-
-            return new AdministradorWhatsappResultados.ResultadoAdmin(
-                "admin_cat_comp_associar_vazio",
-                uiHelper.msg().botoes(
-                    whatsappAdmin,
-                    uiHelper.msg().trunc(corpo, 1024),
-                    List.of(
-                        uiHelper.btn(
-                            "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
-                            "⬅️ Voltar"
-                        ),
-                        uiHelper.btn("COMANDO|ADMIN_COMP_GRUPOS_MENU|0", "🧩 Ver grupos")
-                    )
-                )
-            );
-        }
-
-        int safeOffset = normalizarOffset(offsetGrupos);
-        if (safeOffset >= disponiveis.size()) {
-            safeOffset = 0;
-        }
-
-        int pageSize = disponiveis.size() > LIST_MAX_ROWS ? 8 : 9;
-        int endExclusive = Math.min(safeOffset + pageSize, disponiveis.size());
-        List<GrupoComplementoResponseDTO> page = disponiveis.subList(safeOffset, endExclusive);
-        boolean temMais = endExclusive < disponiveis.size();
-
-        String corpo =
-    	    "🧩 *Associar grupo à categoria*\n\n" +
-	        "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
-	        "*Como funciona?*\n" +
-	        "Ao associar um grupo de complementos, *todos os produtos da categoria " + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) +"* passam a oferecer automaticamente os complementos contidos no grupo.\n\n" +
-	        "Escolha o grupo que deseja aplicar.";
-
-        List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
-
-        for (GrupoComplementoResponseDTO grupo : page) {
-            String descricao =
-                grupo.getMinimoSelecoes() + " mín. / " +
-                    grupo.getMaximoSelecoes() + " máx.";
-
-            itens.add(uiHelper.row(
-                "COMANDO|ADMIN_CAT_COMP_ASSOCIAR|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + grupo.getId(),
-                uiHelper.msg().trunc(grupo.getNome(), 24),
-                uiHelper.msg().trunc(descricao, 72)
-            ));
-        }
-
-        if (temMais) {
-            itens.add(uiHelper.row(
-                "COMANDO|ADMIN_CAT_COMP_ASSOCIAR_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + endExclusive,
-                "➡️ Mais grupos",
-                "Ver próxima página"
-            ));
-        }
-
-        itens.add(uiHelper.row(
-            "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
-            "⬅️ Voltar",
-            "Complementos da categoria"
-        ));
-
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_cat_comp_associar_menu",
-            uiHelper.msg().lista(
-                whatsappAdmin,
-                uiHelper.msg().truncWord(corpo, 1024),
-                "Grupos",
-                "Grupos",
-                itens
-            )
-        );
-    }
-
-    public AdministradorWhatsappResultados.ResultadoAdmin associarGrupoCategoria(
 	    Estabelecimento estabelecimento,
 	    String whatsappAdmin,
 	    Long idCategoria,
 	    Integer offsetCategorias,
-	    Long idGrupo
+	    Integer offsetComplementos
 	) {
 
 	    CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-	    GrupoComplemento grupo = grupoComplementoService.buscarObrigatorio(idGrupo);
 
-	    int proximaOrdem = grupoComplementoService
-	        .listarGruposDaCategoriaProduto(idCategoria, true)
-	        .size() + 1;
+	    List<ComplementoCategoriaAdmin> complementos = listarComplementosDaCategoria(idCategoria);
 
-	    GrupoComplementoCategoriaProdutoResponseDTO associacao =
-	        grupoComplementoService.associarGrupoACategoriaProduto(
-	            idCategoria,
-	            idGrupo,
-	            proximaOrdem
-	        );
+	    int safeOffsetComplementos = normalizarOffset(offsetComplementos);
 
-	    List<ComplementoResponseDTO> complementos =
-	        grupoComplementoService.listarComplementos(idGrupo, true);
-
-	    String regraSelecao = montarTextoRegraSelecao(
-	        grupo.getMinimoSelecoes(),
-	        grupo.getMaximoSelecoes()
-	    );
-
-	    StringBuilder itensExtras = new StringBuilder();
-
-	    for (ComplementoResponseDTO complemento : complementos) {
-	        itensExtras
-	            .append("- ")
-	            .append(uiHelper.msg().trunc(uiHelper.msg().safe(complemento.getNome()), 60))
-	            .append("\n");
+	    if (safeOffsetComplementos >= complementos.size()) {
+	        safeOffsetComplementos = 0;
 	    }
 
-	    String nomeCategoria = uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80);
-	    String nomeGrupo = uiHelper.msg().trunc(uiHelper.msg().safe(associacao.getNomeGrupo()), 80);
+	    int pageSize = complementos.size() > LIST_MAX_ROWS ? 7 : 8;
+	    int endExclusive = Math.min(safeOffsetComplementos + pageSize, complementos.size());
+	    List<ComplementoCategoriaAdmin> page = complementos.subList(safeOffsetComplementos, endExclusive);
+	    boolean temMais = endExclusive < complementos.size();
+
+	    String nomeCategoria = uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 60);
 
 	    String corpo =
-	        "✅ Grupo associado à categoria.\n\n" +
-	            "Categoria: *" + nomeCategoria + "*\n" +
-	            "Grupo: *" + nomeGrupo + "*\n\n" +
-	            "A partir de agora, todos os clientes que comprarem produtos da categoria *" +
-	            nomeCategoria + "* poderão incluir *" + regraSelecao + "* dos seguintes itens extras:\n\n" +
-	            (itensExtras.length() > 0 ? itensExtras.toString() : "- Nenhum complemento ativo cadastrado neste grupo.");
+	        "🧩 *Complementos para " + nomeCategoria + "*\n\n" +
+	            "Estes complementos serão oferecidos automaticamente para *todos os produtos desta categoria*.\n\n" +
+	            "Se quiser criar complementos apenas para um produto específico, configure diretamente no produto.\n\n" +
+	            (complementos.isEmpty()
+	                ? "Nenhum complemento cadastrado ainda.\n\n"
+	                : complementos.size() == 1
+	                    ? "1 complemento cadastrado.\n\n"
+	                    : complementos.size() + " complementos cadastrados.\n\n") +
+	            "Escolha uma opção.";
+
+	    List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
+
+	    itens.add(uiHelper.row(
+	        "COMANDO|ADMIN_CAT_COMP_GRUPO_NOVO|" +
+	            idCategoria + "|" +
+	            normalizarOffset(offsetCategorias),
+	        "➕ Novo complemento",
+	        "Disponível para toda a categoria"
+	    ));
+
+	    for (ComplementoCategoriaAdmin item : page) {
+	        ComplementoResponseDTO complemento = item.complemento();
+
+	        String status = complemento.isAtivo() ? "Ativo" : "Inativo";
+	        String preco = uiHelper.msg().formatarMoeda(complemento.getPrecoAdicional());
+
+	        itens.add(uiHelper.row(
+        	    "COMANDO|ADMIN_COMP_COMPLEMENTO_DETALHE|" +
+        	        item.idGrupo() + "|" +
+        	        safeOffsetComplementos + "|" +
+        	        complemento.getId(),
+        	    uiHelper.msg().trunc(complemento.getNome(), 24),
+        	    uiHelper.msg().trunc(status + " ┃ +" + preco, 72)
+        	));
+	    }
+
+	    if (temMais) {
+	        itens.add(uiHelper.row(
+	            "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" +
+	                idCategoria + "|" +
+	                normalizarOffset(offsetCategorias) + "|" +
+	                endExclusive,
+	            "➡️ Mais opções",
+	            "Ver próxima página"
+	        ));
+	    }
+
+	    itens.add(uiHelper.row(
+	        "COMANDO|ADMIN_CARDAPIO_CATEGORIA_PRODUTOS_MENU|" +
+	            idCategoria + "|" +
+	            normalizarOffset(offsetCategorias),
+	        "⬅️ Voltar",
+	        "Menu da categoria"
+	    ));
 
 	    return new AdministradorWhatsappResultados.ResultadoAdmin(
-	        "admin_cat_comp_associado",
-	        uiHelper.msg().botoes(
+	        "admin_cat_comp_menu",
+	        uiHelper.msg().lista(
 	            whatsappAdmin,
-	            uiHelper.msg().trunc(corpo, 1024),
-	            List.of(
-	                uiHelper.btn(
-	                    "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-	                    "🧩 Ver grupos"
-	                ),
-	                uiHelper.btn(
-	                    "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
-	                    "⬅️ Voltar"
-	                )
-	            )
+	            uiHelper.msg().truncWord(corpo, 1024),
+	            "Complementos",
+	            "Complementos",
+	            itens
 	        )
 	    );
 	}
-
-    public AdministradorWhatsappResultados.ResultadoAdmin montarDetalheGrupoCategoria(
-	    Estabelecimento estabelecimento,
-	    String whatsappAdmin,
-	    Long idCategoria,
-	    Integer offsetCategorias,
-	    Long idGrupo
-	) {
-
-	    CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-	    GrupoComplementoCategoriaProdutoResponseDTO associacao = buscarAssociacaoCategoria(idCategoria, idGrupo);
-	    GrupoComplemento grupo = grupoComplementoService.buscarObrigatorio(idGrupo);
-
-	    String nomeCategoria = uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80);
-	    String nomeGrupo = uiHelper.msg().trunc(uiHelper.msg().safe(associacao.getNomeGrupo()), 80);
-
-	    String regraSelecao = montarTextoRegraSelecao(
-	        grupo.getMinimoSelecoes(),
-	        grupo.getMaximoSelecoes()
-	    );
-
-	    List<ComplementoResponseDTO> complementos = grupoComplementoService.listarComplementos(idGrupo, true);
-
-	    StringBuilder itensExtras = new StringBuilder();
-
-	    for (int i = 0; i < complementos.size() && i < 10; i++) {
-	        itensExtras
-	            .append("- ")
-	            .append(uiHelper.msg().trunc(uiHelper.msg().safe(complementos.get(i).getNome()), 60))
-	            .append("\n");
-	    }
-
-	    if (complementos.size() > 10) {
-	        itensExtras
-	            .append("... e mais ")
-	            .append(complementos.size() - 10)
-	            .append(" itens");
-	    }
-
-	    String corpo =
-	        "Categoria: *" + nomeCategoria + "*\n" +
-	            "Grupo: *" + nomeGrupo + "*\n\n" +
-	            "Todos os clientes que comprarem produtos da categoria *" + nomeCategoria +
-	            "* podem incluir *" + regraSelecao + "* dos seguintes itens extras:\n\n" +
-	            (itensExtras.length() > 0
-	                ? itensExtras.toString()
-	                : "- Nenhum complemento ativo cadastrado neste grupo.");
-
-	    return new AdministradorWhatsappResultados.ResultadoAdmin(
-	        "admin_cat_comp_grupo_detalhe",
-	        uiHelper.msg().botoes(
-	            whatsappAdmin,
-	            uiHelper.msg().trunc(corpo, 1024),
-	            List.of(
-	                uiHelper.btn(
-	                    "COMANDO|ADMIN_CAT_COMP_GRUPO_DESASSOCIAR_CONFIRM|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + idGrupo,
-	                    "Remover grupo"
-	                ),
-	                uiHelper.btn(
-	                    "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-	                    "⬅️ Voltar"
-	                )
-	            )
-	        )
-	    );
-	}
-
-    public AdministradorWhatsappResultados.ResultadoAdmin confirmarDesassociacaoGrupoCategoria(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idCategoria,
-        Integer offsetCategorias,
-        Long idGrupo
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-        GrupoComplementoCategoriaProdutoResponseDTO associacao =
-            buscarAssociacaoCategoria(idCategoria, idGrupo);
-
-        String corpo =
-            "⚠️ *Remover grupo da categoria*\n\n" +
-                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n" +
-                "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(associacao.getNomeGrupo()), 80) + "*\n\n" +
-                "Os produtos desta categoria deixarão de herdar este grupo.\n\n" +
-                "O cadastro do grupo e dos complementos será mantido.";
-
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_cat_comp_desassociar_confirm",
-            uiHelper.msg().botoes(
-                whatsappAdmin,
-                uiHelper.msg().trunc(corpo, 1024),
-                List.of(
-                    uiHelper.btn(
-                        "COMANDO|ADMIN_CAT_COMP_GRUPO_DESASSOCIAR|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + idGrupo,
-                        "Remover"
-                    ),
-                    uiHelper.btn(
-                        "COMANDO|ADMIN_CAT_COMP_GRUPO_DETALHE|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|" + idGrupo,
-                        "Cancelar"
-                    )
-                )
-            )
-        );
-    }
-
-    public AdministradorWhatsappResultados.ResultadoAdmin desassociarGrupoCategoria(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idCategoria,
-        Integer offsetCategorias,
-        Long idGrupo
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
-        GrupoComplementoCategoriaProdutoResponseDTO associacao =
-            buscarAssociacaoCategoria(idCategoria, idGrupo);
-
-        grupoComplementoService.desassociarGrupoDaCategoriaProduto(idCategoria, idGrupo);
-
-        String corpo =
-            "✅ Grupo removido da categoria.\n\n" +
-                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n" +
-                "Grupo: *" + uiHelper.msg().trunc(uiHelper.msg().safe(associacao.getNomeGrupo()), 80) + "*";
-
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_cat_comp_desassociado",
-            uiHelper.msg().botoes(
-                whatsappAdmin,
-                uiHelper.msg().trunc(corpo, 1024),
-                List.of(
-                    uiHelper.btn(
-                        "COMANDO|ADMIN_CAT_COMP_ASSOCIADOS|" + idCategoria + "|" + normalizarOffset(offsetCategorias) + "|0",
-                        "🧩 Ver grupos"
-                    ),
-                    uiHelper.btn(
-                        "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
-                        "⬅️ Voltar"
-                    )
-                )
-            )
-        );
-    }
-
+    
+    
     private CategoriaProduto buscarCategoriaValidada(Estabelecimento estabelecimento, Long idCategoria) {
 
         uiHelper.validarBasico(estabelecimento, "admin");
@@ -608,61 +242,340 @@ public class AdminComplementoCategoriaService {
         return categoria;
     }
 
-    private GrupoComplementoCategoriaProdutoResponseDTO buscarAssociacaoCategoria(
-        Long idCategoria,
-        Long idGrupo
-    ) {
+    
+    public AdministradorWhatsappResultados.ResultadoAdmin iniciarCadastroGuiadoComplementoCategoria(
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idSessao,
+	    Long idCategoria,
+	    Integer offsetCategorias
+	) {
 
-        return grupoComplementoService.listarGruposDaCategoriaProduto(idCategoria, false)
-            .stream()
-            .filter(item -> Objects.equals(item.getIdGrupo(), idGrupo))
-            .findFirst()
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo não está associado à categoria"));
+	    CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
+
+	    List<GrupoComplementoResponseDTO> grupos =
+	        grupoComplementoService.listarGruposDaCategoria(idCategoria, true);
+
+	    GrupoComplementoResponseDTO grupo;
+
+	    if (grupos == null || grupos.isEmpty()) {
+	        int ordem = grupoComplementoService
+	            .listarGruposDaCategoria(idCategoria, false)
+	            .size() + 1;
+
+	        GrupoComplementoRequestDTO dto = new GrupoComplementoRequestDTO();
+	        dto.setIdEstabelecimento(estabelecimento.getId());
+	        dto.setIdCategoria(idCategoria);
+	        dto.setNome("Complementos - " + categoria.getNome());
+	        dto.setDescricao("Complementos disponíveis para a categoria " + categoria.getNome());
+	        dto.setMinimoSelecoes(0);
+	        dto.setMaximoSelecoes(1);
+	        dto.setOrdem(ordem);
+	        dto.setAtivo(true);
+
+	        // O grupo técnico é criado automaticamente para manter a navegação simples.
+	        grupo = grupoComplementoService.salvarGrupo(null, dto);
+	    } else {
+	        grupo = grupos.get(0);
+	    }
+
+	    sessaoAdminComplementoService.marcarAguardandoNovoComplementoCategoria(
+    	    idSessao,
+    	    idCategoria,
+    	    grupo.getId(),
+    	    normalizarOffset(offsetCategorias)
+    	);
+
+	    String corpo =
+	        "➕ *Novo complemento para " + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n\n" +
+	            "Este complemento será oferecido para todos os produtos desta categoria.\n\n" +
+	            "Digite o *nome do complemento*.\n\n" +
+	            "Exemplos:\n" +
+	            "- Borda recheada\n" +
+	            "- Molho extra\n" +
+	            "- Leite condensado\n" +
+	            "- Granola";
+
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_cat_comp_novo_nome",
+	        uiHelper.msg().botoes(
+	            whatsappAdmin,
+	            uiHelper.msg().trunc(corpo, 1024),
+	            List.of(
+	                uiHelper.btn(
+	                    "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" +
+	                        idCategoria + "|" +
+	                        normalizarOffset(offsetCategorias),
+	                    "⬅️ Cancelar"
+	                )
+	            )
+	        )
+	    );
+	}
+
+    public AdministradorWhatsappResultados.ResultadoAdmin concluirCadastroGuiadoComplementoCategoria(
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idSessao,
+	    String texto
+	) {
+
+	    uiHelper.validarBasico(estabelecimento, whatsappAdmin);
+
+	    if (!sessaoAdminComplementoService.isAguardandoNovoComplementoCategoria(idSessao)) {
+	        throw new ResponseStatusException(
+	            HttpStatus.CONFLICT,
+	            "Sessão não está aguardando cadastro de complemento da categoria"
+	        );
+	    }
+
+	    String etapa = sessaoAdminComplementoService.getEtapaNovoComplementoCategoria(idSessao);
+	    String valor = texto == null ? "" : texto.trim();
+
+	    Long idCategoria = sessaoAdminComplementoService.getIdCategoriaNovoComplementoCategoria(idSessao);
+	    Long idGrupo = sessaoAdminComplementoService.getIdGrupoNovoComplementoCategoria(idSessao);
+	    int offsetCategorias = sessaoAdminComplementoService.getOffsetListaCategoriaNovoComplemento(idSessao);
+
+	    CategoriaProduto categoria = buscarCategoriaValidada(estabelecimento, idCategoria);
+
+	    if (SessaoWhatsappAdminComplementoService.ETAPA_PRODUTO_COMPLEMENTO_NOME.equals(etapa)) {
+
+	        if (!StringUtils.hasText(valor)) {
+	            return new AdministradorWhatsappResultados.ResultadoAdmin(
+	                "admin_cat_comp_nome_invalido",
+	                uiHelper.msg().texto(
+	                    whatsappAdmin,
+	                    "Não consegui identificar o nome do complemento.\n\nExemplo: *Borda recheada*"
+	                )
+	            );
+	        }
+
+	        sessaoAdminComplementoService.salvarNomeNovoComplementoCategoria(
+	            idSessao,
+	            uiHelper.msg().trunc(valor, 120)
+	        );
+
+	        String corpo =
+	            "📝 *Descrição do complemento*\n\n" +
+	                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n" +
+	                "Complemento: *" + uiHelper.msg().trunc(valor, 80) + "*\n\n" +
+	                "Agora envie uma *descrição curta*.\n\n" +
+	                "Se não quiser descrição, envie: *sem descrição*";
+
+	        return new AdministradorWhatsappResultados.ResultadoAdmin(
+	            "admin_cat_comp_novo_descricao",
+	            uiHelper.msg().texto(whatsappAdmin, uiHelper.msg().trunc(corpo, 1024))
+	        );
+	    }
+
+	    if (SessaoWhatsappAdminComplementoService.ETAPA_PRODUTO_COMPLEMENTO_DESCRICAO.equals(etapa)) {
+
+	        String descricao = "sem descrição".equalsIgnoreCase(valor)
+	            ? ""
+	            : uiHelper.msg().trunc(valor, 600);
+
+	        sessaoAdminComplementoService.salvarDescricaoNovoComplementoCategoria(idSessao, descricao);
+
+	        String corpo =
+	            "💲 *Preço do complemento*\n\n" +
+	                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n" +
+	                "Complemento: *" + uiHelper.msg().trunc(uiHelper.msg().safe(sessaoAdminComplementoService.getNomeNovoComplementoCategoria(idSessao)), 80) + "*\n\n" +
+	                "Agora envie o *preço adicional*.\n\n" +
+	                "Exemplos:\n" +
+	                "- 0\n" +
+	                "- 2,50\n" +
+	                "- 5";
+
+	        return new AdministradorWhatsappResultados.ResultadoAdmin(
+	            "admin_cat_comp_novo_preco",
+	            uiHelper.msg().texto(whatsappAdmin, uiHelper.msg().trunc(corpo, 1024))
+	        );
+	    }
+
+	    if (SessaoWhatsappAdminComplementoService.ETAPA_PRODUTO_COMPLEMENTO_PRECO.equals(etapa)) {
+
+	        BigDecimal preco;
+
+	        try {
+	            String valorNormalizado = valor
+	                .replace("R$", "")
+	                .replace("r$", "")
+	                .replace(" ", "")
+	                .replace(",", ".");
+
+	            preco = new BigDecimal(valorNormalizado).setScale(2, RoundingMode.HALF_UP);
+	        } catch (Exception ex) {
+	            return new AdministradorWhatsappResultados.ResultadoAdmin(
+	                "admin_cat_comp_preco_invalido",
+	                uiHelper.msg().texto(
+	                    whatsappAdmin,
+	                    "Preço inválido.\n\nExemplos válidos:\n- 0\n- 2,50\n- 5"
+	                )
+	            );
+	        }
+
+	        if (preco.compareTo(BigDecimal.ZERO) < 0) {
+	            return new AdministradorWhatsappResultados.ResultadoAdmin(
+	                "admin_cat_comp_preco_negativo",
+	                uiHelper.msg().texto(
+	                    whatsappAdmin,
+	                    "O preço do complemento não pode ser negativo.\n\nExemplo: *2,50*"
+	                )
+	            );
+	        }
+
+	        sessaoAdminComplementoService.salvarPrecoNovoComplementoCategoria(idSessao, preco);
+
+	        String corpo =
+	            "📋 *Regra de consumo*\n\n" +
+	                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n" +
+	                "Complemento: *" + uiHelper.msg().trunc(uiHelper.msg().safe(sessaoAdminComplementoService.getNomeNovoComplementoCategoria(idSessao)), 80) + "*\n" +
+	                "Preço adicional: *" + uiHelper.msg().formatarMoeda(preco) + "*\n\n" +
+	                "Quantas vezes esse complemento pode ser adicionado em cada produto?\n\n" +
+	                "Envie apenas um número.\n\n" +
+	                "Exemplos:\n" +
+	                "- 1\n" +
+	                "- 2\n" +
+	                "- 3";
+
+	        return new AdministradorWhatsappResultados.ResultadoAdmin(
+	            "admin_cat_comp_novo_regras",
+	            uiHelper.msg().texto(whatsappAdmin, uiHelper.msg().trunc(corpo, 1024))
+	        );
+	    }
+
+	    if (SessaoWhatsappAdminComplementoService.ETAPA_PRODUTO_COMPLEMENTO_REGRAS.equals(etapa)) {
+
+	        Integer maximoSelecoes;
+
+	        try {
+	            maximoSelecoes = Integer.valueOf(valor.replaceAll("\\D", ""));
+	        } catch (Exception ex) {
+	            return new AdministradorWhatsappResultados.ResultadoAdmin(
+	                "admin_cat_comp_regra_invalida",
+	                uiHelper.msg().texto(
+	                    whatsappAdmin,
+	                    "Não consegui identificar a regra de consumo.\n\nEnvie apenas um número.\n\nExemplo: *1*"
+	                )
+	            );
+	        }
+
+	        if (maximoSelecoes == null || maximoSelecoes < 1) {
+	            return new AdministradorWhatsappResultados.ResultadoAdmin(
+	                "admin_cat_comp_regra_invalida",
+	                uiHelper.msg().texto(
+	                    whatsappAdmin,
+	                    "A quantidade máxima precisa ser maior que zero.\n\nExemplo: *1*"
+	                )
+	            );
+	        }
+
+	        String nome = sessaoAdminComplementoService.getNomeNovoComplementoCategoria(idSessao);
+	        String descricao = sessaoAdminComplementoService.getDescricaoNovoComplementoCategoria(idSessao);
+	        BigDecimal preco = sessaoAdminComplementoService.getPrecoNovoComplementoCategoria(idSessao);
+
+	        ComplementoRequestDTO dto = new ComplementoRequestDTO();
+	        dto.setIdGrupo(idGrupo);
+	        dto.setNome(nome);
+	        dto.setDescricao(descricao);
+	        dto.setPrecoAdicional(preco == null ? BigDecimal.ZERO : preco);
+	        dto.setAtivo(true);
+
+	        ComplementoResponseDTO complemento = grupoComplementoService.salvarComplemento(null, dto);
+
+	        GrupoComplementoRequestDTO grupoDto = new GrupoComplementoRequestDTO();
+	        grupoDto.setIdEstabelecimento(estabelecimento.getId());
+	        grupoDto.setIdCategoria(idCategoria);
+	        grupoDto.setNome("Complementos - " + categoria.getNome());
+	        grupoDto.setDescricao("Complementos disponíveis para a categoria " + categoria.getNome());
+	        grupoDto.setMinimoSelecoes(0);
+	        grupoDto.setMaximoSelecoes(maximoSelecoes);
+	        grupoDto.setOrdem(1);
+	        grupoDto.setAtivo(true);
+
+	        // A regra fica no grupo técnico da categoria, sem expor esse conceito ao admin.
+	        grupoComplementoService.salvarGrupo(idGrupo, grupoDto);
+
+	        sessaoAdminComplementoService.limparAguardandoNovoComplementoCategoria(idSessao);
+
+	        String corpo =
+	            "✅ Complemento cadastrado.\n\n" +
+	                "Categoria: *" + uiHelper.msg().trunc(uiHelper.msg().safe(categoria.getNome()), 80) + "*\n" +
+	                "Complemento: *" + uiHelper.msg().trunc(uiHelper.msg().safe(complemento.getNome()), 80) + "*\n" +
+	                "Preço adicional: *" + uiHelper.msg().formatarMoeda(complemento.getPrecoAdicional()) + "*\n" +
+	                "Máximo por item: *" + maximoSelecoes + "*";
+
+	        return new AdministradorWhatsappResultados.ResultadoAdmin(
+	            "admin_cat_comp_novo_ok",
+	            uiHelper.msg().botoes(
+	                whatsappAdmin,
+	                uiHelper.msg().trunc(corpo, 1024),
+	                List.of(
+	                    uiHelper.btn(
+	                        "COMANDO|ADMIN_CAT_COMPLEMENTOS_MENU|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
+	                        "🧩 Ver complementos"
+	                    ),
+	                    uiHelper.btn(
+	                        "COMANDO|ADMIN_CAT_COMP_GRUPO_NOVO|" + idCategoria + "|" + normalizarOffset(offsetCategorias),
+	                        "➕ Novo complemento"
+	                    )
+	                )
+	            )
+	        );
+	    }
+
+	    throw new ResponseStatusException(
+	        HttpStatus.CONFLICT,
+	        "Etapa inválida do cadastro guiado de complemento da categoria"
+	    );
+	}
+    
+    
+
+    private List<ComplementoCategoriaAdmin> listarComplementosDaCategoria(Long idCategoria) {
+
+        List<GrupoComplementoResponseDTO> grupos =
+            grupoComplementoService.listarGruposDaCategoria(idCategoria, true);
+
+        if (grupos == null || grupos.isEmpty()) {
+            return List.of();
+        }
+
+        List<ComplementoCategoriaAdmin> itens = new ArrayList<>();
+
+        for (GrupoComplementoResponseDTO grupo : grupos) {
+            if (grupo == null || grupo.getId() == null) {
+                continue;
+            }
+
+            List<ComplementoResponseDTO> complementos =
+                grupoComplementoService.listarComplementos(grupo.getId(), false);
+
+            if (complementos == null || complementos.isEmpty()) {
+                continue;
+            }
+
+            for (ComplementoResponseDTO complemento : complementos) {
+                if (complemento == null || complemento.getId() == null) {
+                    continue;
+                }
+
+                itens.add(new ComplementoCategoriaAdmin(grupo.getId(), complemento));
+            }
+        }
+
+        return itens.stream()
+            .sorted((a, b) -> uiHelper.msg().safe(a.complemento().getNome())
+                .compareToIgnoreCase(uiHelper.msg().safe(b.complemento().getNome())))
+            .toList();
     }
-
+    
+    
     private int normalizarOffset(Integer offset) {
         return offset == null || offset < 0 ? 0 : offset;
     }
     
     
-    /**
-     * Monta um texto amigável para representar a regra de seleção de complementos
-     * (mínimo e máximo) configurada em um grupo.
-     *
-     * Objetivo:
-     * - Traduzir valores numéricos técnicos (min/max) em uma frase compreensível
-     *   para o usuário final no WhatsApp.
-     * - Evitar mensagens confusas quando os limites não estão definidos.
-     *
-     * Regras aplicadas:
-     * - min = 0 e max = 0 → "itens extras" (sem restrição explícita)
-     * - min = 0 e max > 0 → "até X"
-     * - min = max → "X" (quantidade fixa obrigatória)
-     * - min > 0 e max > min → "de X até Y"
-     *
-     * Observações:
-     * - Valores nulos são tratados como 0 para simplificar a lógica.
-     * - Nunca retorna texto técnico (ex.: "min=1 max=3"), sempre linguagem natural.
-     * - Usado principalmente em mensagens de confirmação para explicar o impacto
-     *   da configuração ao administrador.
-     */
-    private String montarTextoRegraSelecao(Integer minimoSelecoes, Integer maximoSelecoes) {
-
-        int minimo = minimoSelecoes == null ? 0 : Math.max(0, minimoSelecoes);
-        int maximo = maximoSelecoes == null ? 0 : Math.max(0, maximoSelecoes);
-
-        if (minimo == 0 && maximo == 0) {
-            return "itens extras";
-        }
-
-        if (minimo == 0) {
-            return "até " + maximo;
-        }
-
-        if (minimo == maximo) {
-            return String.valueOf(minimo);
-        }
-
-        return "de " + minimo + " até " + maximo;
-    }
+    
+    
 }

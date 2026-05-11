@@ -9,13 +9,15 @@ import br.com.oraped.domain.produto.tamanho.GradeTamanho;
 
 public interface GradeTamanhoRepository extends JpaRepository<GradeTamanho, Long> {
 
-    List<GradeTamanho> findByEstabelecimentoIdOrderByNomeAsc(Long idEstabelecimento);
-
-    List<GradeTamanho> findByEstabelecimentoIdAndAtivoTrueOrderByNomeAsc(Long idEstabelecimento);
-
     List<GradeTamanho> findByEstabelecimentoIdAndExcluidoFalseOrderByNomeAsc(Long idEstabelecimento);
 
     List<GradeTamanho> findByEstabelecimentoIdAndAtivoTrueAndExcluidoFalseOrderByNomeAsc(Long idEstabelecimento);
 
-    Optional<GradeTamanho> findFirstByEstabelecimentoIdAndExcluidoFalseOrderByIdAsc(Long idEstabelecimento);
+    Optional<GradeTamanho> findByCategoriaIdAndAtivoTrueAndExcluidoFalse(Long idCategoria);
+
+    Optional<GradeTamanho> findByProdutoIdAndAtivoTrueAndExcluidoFalse(Long idProduto);
+
+    boolean existsByCategoriaIdAndAtivoTrueAndExcluidoFalse(Long idCategoria);
+
+    boolean existsByProdutoIdAndAtivoTrueAndExcluidoFalse(Long idProduto);
 }

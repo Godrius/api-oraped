@@ -379,6 +379,77 @@ public class SessaoAtendimentoWhatsapp {
     @Column(name = "offset_lista_produto_novo_preco_complemento")
     private Integer offsetListaProdutoNovoPrecoComplemento = 0;
     
+    // =========================================================
+	// ADMIN — Complemento de produto (cadastro guiado)
+	// =========================================================
+	
+	@Column(name = "aguardando_novo_complemento_produto", nullable = false)
+	private boolean aguardandoNovoComplementoProduto = false;
+	
+	@Column(name = "etapa_novo_complemento_produto", length = 30)
+	private String etapaNovoComplementoProduto;
+	
+	@Column(name = "id_produto_novo_complemento_produto")
+	private Long idProdutoNovoComplementoProduto;
+	
+	@Column(name = "id_categoria_novo_complemento_produto")
+	private Long idCategoriaNovoComplementoProduto;
+	
+	@Column(name = "id_grupo_novo_complemento_produto")
+	private Long idGrupoNovoComplementoProduto;
+	
+	@Column(name = "offset_lista_produto_novo_complemento")
+	private Integer offsetListaProdutoNovoComplemento = 0;
+	
+	@Column(name = "nome_novo_complemento_produto", length = 120)
+	private String nomeNovoComplementoProduto;
+	
+	@Column(name = "descricao_novo_complemento_produto", length = 600)
+	private String descricaoNovoComplementoProduto;
+	
+	@Column(name = "preco_novo_complemento_produto", precision = 10, scale = 2)
+	private BigDecimal precoNovoComplementoProduto;
+	
+	@Column(name = "minimo_novo_complemento_produto")
+	private Integer minimoNovoComplementoProduto;
+	
+	@Column(name = "maximo_novo_complemento_produto")
+	private Integer maximoNovoComplementoProduto;
+	 
+	// =========================================================
+	// ADMIN — Complemento de categoria (cadastro guiado)
+	// =========================================================
+
+	@Column(name = "aguardando_novo_complemento_categoria", nullable = false)
+	private boolean aguardandoNovoComplementoCategoria = false;
+
+	@Column(name = "etapa_novo_complemento_categoria", length = 30)
+	private String etapaNovoComplementoCategoria;
+
+	@Column(name = "id_categoria_novo_complemento_categoria")
+	private Long idCategoriaNovoComplementoCategoria;
+
+	@Column(name = "id_grupo_novo_complemento_categoria")
+	private Long idGrupoNovoComplementoCategoria;
+
+	@Column(name = "offset_lista_categoria_novo_complemento")
+	private Integer offsetListaCategoriaNovoComplemento = 0;
+
+	@Column(name = "nome_novo_complemento_categoria", length = 120)
+	private String nomeNovoComplementoCategoria;
+
+	@Column(name = "descricao_novo_complemento_categoria", length = 600)
+	private String descricaoNovoComplementoCategoria;
+
+	@Column(name = "preco_novo_complemento_categoria", precision = 10, scale = 2)
+	private BigDecimal precoNovoComplementoCategoria;
+
+	@Column(name = "minimo_novo_complemento_categoria")
+	private Integer minimoNovoComplementoCategoria;
+
+	@Column(name = "maximo_novo_complemento_categoria")
+	private Integer maximoNovoComplementoCategoria;
+	
 	// =========================================================
 	// ADMIN — Opção de tamanho (Criar por digitação)
 	// =========================================================
@@ -392,6 +463,40 @@ public class SessaoAtendimentoWhatsapp {
 	@Column(name = "offset_produtos_nova_opcao_tamanho")
 	private Integer offsetProdutosNovaOpcaoTamanho = 0;
 	 
+	// =========================================================
+	// ADMIN — Opção de tamanho do produto (Criar por digitação)
+	// =========================================================
+
+	@Column(name = "aguardando_novo_tamanho_produto", nullable = false)
+	private Boolean aguardandoNovoTamanhoProduto = false;
+
+	@Column(name = "id_produto_novo_tamanho_produto")
+	private Long idProdutoNovoTamanhoProduto;
+
+	@Column(name = "id_categoria_novo_tamanho_produto")
+	private Long idCategoriaNovoTamanhoProduto;
+
+	@Column(name = "offset_lista_novo_tamanho_produto")
+	private Integer offsetListaNovoTamanhoProduto = 0;
+	
+	// =========================================================
+	// ADMIN — Tamanho do produto (Nome por digitação)
+	// =========================================================
+
+	@Column(name = "aguardando_novo_nome_tamanho_produto", nullable = false)
+	private Boolean aguardandoNovoNomeTamanhoProduto = false;
+
+	@Column(name = "id_produto_novo_nome_tamanho_produto")
+	private Long idProdutoNovoNomeTamanhoProduto;
+
+	@Column(name = "id_categoria_novo_nome_tamanho_produto")
+	private Long idCategoriaNovoNomeTamanhoProduto;
+
+	@Column(name = "id_opcao_tamanho_novo_nome_produto")
+	private Long idOpcaoTamanhoNovoNomeProduto;
+
+	@Column(name = "offset_lista_novo_nome_tamanho_produto")
+	private Integer offsetListaNovoNomeTamanhoProduto = 0;
 	
 	// =========================================================
 	// ADMIN — Opção de tamanho (Descrição por digitação)
@@ -509,13 +614,38 @@ public class SessaoAtendimentoWhatsapp {
             aguardandoNovaOpcaoTamanho = false;
         }
         
+        if (aguardandoNovoTamanhoProduto == null) {
+            aguardandoNovoTamanhoProduto = false;
+        }
+
+        if (offsetListaNovoTamanhoProduto == null) {
+            offsetListaNovoTamanhoProduto = 0;
+        }
+        
         if (aguardandoNovoPrecoProdutoTamanho == null) {
             aguardandoNovoPrecoProdutoTamanho = false;
+        }
+        if (aguardandoNovoNomeTamanhoProduto == null) {
+            aguardandoNovoNomeTamanhoProduto = false;
+        }
+
+        if (offsetListaNovoNomeTamanhoProduto == null) {
+            offsetListaNovoNomeTamanhoProduto = 0;
         }
         
         if (aguardandoDescricaoOpcaoTamanho == null) {
             aguardandoDescricaoOpcaoTamanho = false;
         }
+        
+        if (offsetListaProdutoNovoComplemento == null) {
+            offsetListaProdutoNovoComplemento = 0;
+        }
+        
+        if (offsetListaCategoriaNovoComplemento == null) {
+            offsetListaCategoriaNovoComplemento = 0;
+        }
+        
+        
     }
 
     @PreUpdate

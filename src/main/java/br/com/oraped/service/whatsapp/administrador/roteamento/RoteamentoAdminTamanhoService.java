@@ -5,7 +5,8 @@ import org.springframework.stereotype.Service;
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
-import br.com.oraped.service.whatsapp.administrador.AdminTamanhoService;
+import br.com.oraped.service.whatsapp.administrador.AdminTamanhoCategoriaService;
+import br.com.oraped.service.whatsapp.administrador.AdminTamanhoProdutoService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
 import br.com.oraped.service.whatsapp.orquestrador.OrquestradorParseService;
 import br.com.oraped.service.whatsapp.sessao.SessaoWhatsappAdminTamanhoService;
@@ -20,16 +21,18 @@ import lombok.RequiredArgsConstructor;
  * de tamanho e configuração de preço por tamanho no produto.
  *
  * Utilização:
- * Deve permanecer fino, delegando as regras para AdminTamanhoService.
+ * Deve permanecer fino, delegando regras de categoria para AdminTamanhoCategoriaService
+ * e regras de produto para AdminTamanhoProdutoService.
  */
 @Service
 @RequiredArgsConstructor
 public class RoteamentoAdminTamanhoService {
 
-    private final AdminTamanhoService adminTamanhoService;
+    private final AdminTamanhoCategoriaService adminTamanhoCategoriaService;
+    private final AdminTamanhoProdutoService adminTamanhoProdutoService;
     private final OrquestradorParseService parse;
     private final SessaoWhatsappAdminTamanhoService sessaoAdminTamanhoService;
-    
+
     public RoteamentoResultado rotear(
         Estabelecimento estabelecimento,
         String whatsappAdmin,
@@ -46,7 +49,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(3));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.montarMenuTamanhosCategoria(
+                    adminTamanhoCategoriaService.montarMenuTamanhosCategoria(
                         estabelecimento,
                         whatsappAdmin,
                         idCategoria,
@@ -61,7 +64,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(3));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.ativarTamanhosCategoria(
+                    adminTamanhoCategoriaService.ativarTamanhosCategoria(
                         estabelecimento,
                         whatsappAdmin,
                         idCategoria,
@@ -76,7 +79,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(3));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.desativarTamanhosCategoria(
+                    adminTamanhoCategoriaService.desativarTamanhosCategoria(
                         estabelecimento,
                         whatsappAdmin,
                         idCategoria,
@@ -92,7 +95,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetOpcoes = parse.parseIntDefaultZero(cmd.getParte(4));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.montarMenuOpcoesTamanhoCategoria(
+                    adminTamanhoCategoriaService.montarMenuOpcoesTamanhoCategoria(
                         estabelecimento,
                         whatsappAdmin,
                         idCategoria,
@@ -110,7 +113,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(4));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.montarMenuOpcaoTamanho(
+                    adminTamanhoCategoriaService.montarMenuOpcaoTamanho(
                         estabelecimento,
                         whatsappAdmin,
                         idOpcao,
@@ -126,7 +129,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(3));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.iniciarCadastroOpcaoTamanho(
+                    adminTamanhoCategoriaService.iniciarCadastroOpcaoTamanho(
                         estabelecimento,
                         whatsappAdmin,
                         idSessao,
@@ -136,7 +139,7 @@ public class RoteamentoAdminTamanhoService {
 
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
-            
+
             case "ADMIN_TAM_OPCAO_CANCELAR": {
                 Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(2), "idCategoria");
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(3));
@@ -145,7 +148,7 @@ public class RoteamentoAdminTamanhoService {
                 sessaoAdminTamanhoService.limparAguardandoNovaOpcaoTamanho(idSessao);
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.montarMenuTamanhosCategoria(
+                    adminTamanhoCategoriaService.montarMenuTamanhosCategoria(
                         estabelecimento,
                         whatsappAdmin,
                         idCategoria,
@@ -161,7 +164,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(4));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.ativarOpcaoTamanho(
+                    adminTamanhoCategoriaService.ativarOpcaoTamanho(
                         estabelecimento,
                         whatsappAdmin,
                         idOpcao,
@@ -178,7 +181,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(4));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.desativarOpcaoTamanho(
+                    adminTamanhoCategoriaService.desativarOpcaoTamanho(
                         estabelecimento,
                         whatsappAdmin,
                         idOpcao,
@@ -195,7 +198,7 @@ public class RoteamentoAdminTamanhoService {
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(4));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.iniciarAlteracaoDescricaoOpcaoTamanho(
+                    adminTamanhoCategoriaService.iniciarAlteracaoDescricaoOpcaoTamanho(
                         estabelecimento,
                         whatsappAdmin,
                         idSessao,
@@ -206,35 +209,52 @@ public class RoteamentoAdminTamanhoService {
 
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
-
-            case "ADMIN_PROD_TAMANHOS_PRECOS": {
+            
+            case "ADMIN_PROD_TAMANHOS_MENU": {
                 Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
                 Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(4));
-                Integer offsetTamanhos = parse.parseIntDefaultZero(cmd.getParte(5));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.montarMenuPrecosTamanhoProduto(
+                    adminTamanhoProdutoService.montarMenuTamanhosProduto(
                         estabelecimento,
                         whatsappAdmin,
                         idProduto,
                         idCategoria,
-                        offsetProdutos,
-                        offsetTamanhos,
-                        null
+                        offsetProdutos
                     );
 
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
-
-            case "ADMIN_PROD_TAM_PRECO_MENU": {
+            
+            case "ADMIN_PROD_TAMANHO_MENU": {
                 Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
                 Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
                 Long idOpcaoTamanho = parse.parseLongObrigatorio(cmd.getParte(4), "idOpcaoTamanho");
                 Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(5));
 
                 AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminTamanhoService.iniciarAlteracaoPrecoTamanhoProduto(
+                    adminTamanhoProdutoService.montarMenuTamanhoProduto(
+                        estabelecimento,
+                        whatsappAdmin,
+                        idProduto,
+                        idCategoria,
+                        idOpcaoTamanho,
+                        offsetProdutos,
+                        null
+                    );
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+            
+            case "ADMIN_PROD_TAMANHO_NOME_MENU": {
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Long idOpcaoTamanho = parse.parseLongObrigatorio(cmd.getParte(4), "idOpcaoTamanho");
+                Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(5));
+
+                AdministradorWhatsappResultados.ResultadoAdmin r =
+                    adminTamanhoProdutoService.iniciarAlteracaoNomeTamanhoProdutoPorDigitacao(
                         estabelecimento,
                         whatsappAdmin,
                         idSessao,
@@ -247,6 +267,104 @@ public class RoteamentoAdminTamanhoService {
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
 
+            case "ADMIN_PROD_TAMANHO_ATIVAR": {
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Long idOpcaoTamanho = parse.parseLongObrigatorio(cmd.getParte(4), "idOpcaoTamanho");
+                Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(5));
+
+                AdministradorWhatsappResultados.ResultadoAdmin r =
+                    adminTamanhoProdutoService.alterarStatusTamanhoProduto(
+                        estabelecimento,
+                        whatsappAdmin,
+                        idProduto,
+                        idCategoria,
+                        idOpcaoTamanho,
+                        offsetProdutos,
+                        true
+                    );
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+
+            case "ADMIN_PROD_TAMANHO_DESATIVAR": {
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Long idOpcaoTamanho = parse.parseLongObrigatorio(cmd.getParte(4), "idOpcaoTamanho");
+                Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(5));
+
+                AdministradorWhatsappResultados.ResultadoAdmin r =
+                    adminTamanhoProdutoService.alterarStatusTamanhoProduto(
+                        estabelecimento,
+                        whatsappAdmin,
+                        idProduto,
+                        idCategoria,
+                        idOpcaoTamanho,
+                        offsetProdutos,
+                        false
+                    );
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+            
+            case "ADMIN_PROD_TAMANHO_NOVO_MENU": {
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Integer offsetProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+
+                AdministradorWhatsappResultados.ResultadoAdmin r =
+                    adminTamanhoProdutoService.iniciarCadastroTamanhoProdutoPorDigitacao(
+                        estabelecimento,
+                        whatsappAdmin,
+                        idSessao,
+                        idProduto,
+                        idCategoria,
+                        offsetProduto
+                    );
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+
+            case "ADMIN_PROD_TAMANHOS_PRECOS": {
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(4));
+                Integer offsetTamanhos = parse.parseIntDefaultZero(cmd.getParte(5));
+
+                AdministradorWhatsappResultados.ResultadoAdmin r =
+                    adminTamanhoProdutoService.montarMenuPrecosTamanhoProduto(
+                        estabelecimento,
+                        whatsappAdmin,
+                        idProduto,
+                        idCategoria,
+                        offsetProdutos,
+                        offsetTamanhos,
+                        null
+                    );
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+            
+            case "ADMIN_PROD_TAM_PRECO_MENU": {
+                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+                Long idOpcaoTamanho = parse.parseLongObrigatorio(cmd.getParte(4), "idOpcaoTamanho");
+                Integer offsetProdutos = parse.parseIntDefaultZero(cmd.getParte(5));
+
+                AdministradorWhatsappResultados.ResultadoAdmin r =
+                    adminTamanhoProdutoService.iniciarAlteracaoPrecoTamanhoProduto(
+                        estabelecimento,
+                        whatsappAdmin,
+                        idSessao,
+                        idProduto,
+                        idCategoria,
+                        idOpcaoTamanho,
+                        offsetProdutos
+                    );
+
+                return new RoteamentoResultado(r.chave, r.mensagem);
+            }
+            
             default:
                 return null;
         }

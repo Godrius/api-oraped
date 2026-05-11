@@ -14,10 +14,8 @@ import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.produto.CategoriaProduto;
 import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.domain.produto.tamanho.GradeTamanho;
-import br.com.oraped.domain.produto.tamanho.GradeTamanhoCategoriaProduto;
 import br.com.oraped.domain.produto.tamanho.OpcaoTamanho;
 import br.com.oraped.domain.produto.tamanho.OpcaoTamanhoProduto;
-import br.com.oraped.dto.produto.tamanho.GradeTamanhoCategoriaProdutoResponseDTO;
 import br.com.oraped.dto.produto.tamanho.GradeTamanhoRequestDTO;
 import br.com.oraped.dto.produto.tamanho.GradeTamanhoResponseDTO;
 import br.com.oraped.dto.produto.tamanho.OpcaoTamanhoProdutoRequestDTO;
@@ -26,7 +24,6 @@ import br.com.oraped.dto.produto.tamanho.OpcaoTamanhoRequestDTO;
 import br.com.oraped.dto.produto.tamanho.OpcaoTamanhoResponseDTO;
 import br.com.oraped.repository.produto.CategoriaProdutoRepository;
 import br.com.oraped.repository.produto.ProdutoRepository;
-import br.com.oraped.repository.produto.tamanho.GradeTamanhoCategoriaProdutoRepository;
 import br.com.oraped.repository.produto.tamanho.GradeTamanhoRepository;
 import br.com.oraped.repository.produto.tamanho.OpcaoTamanhoProdutoRepository;
 import br.com.oraped.repository.produto.tamanho.OpcaoTamanhoRepository;
@@ -60,8 +57,7 @@ public class GradeTamanhoService {
     private final GradeTamanhoRepository gradeTamanhoRepository;
     private final OpcaoTamanhoRepository opcaoTamanhoRepository;
     private final OpcaoTamanhoProdutoRepository opcaoTamanhoProdutoRepository;
-    private final GradeTamanhoCategoriaProdutoRepository gradeTamanhoCategoriaProdutoRepository;
-
+    
     @Transactional(readOnly = true)
     public GradeTamanho buscarObrigatoria(Long idGrade) {
 
@@ -134,10 +130,19 @@ public class GradeTamanhoService {
             }
 
             Estabelecimento estabelecimento = estabelecimentoService.buscar(dto.getIdEstabelecimento());
+
             grade.setEstabelecimento(estabelecimento);
             grade.setExcluido(false);
-        } else if (grade.isExcluido()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Grade de tamanhos excluída não pode ser alterada");
+
+            // O escopo nasce junto com a grade para impedir reaproveitamento indevido.
+            aplicarEscopoGrade(grade, dto);
+        } else {
+            if (grade.isExcluido()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Grade de tamanhos excluída não pode ser alterada");
+            }
+
+            // Alteração de grade existente preserva o escopo original.
+            validarEscopoGrade(grade);
         }
 
         grade.setNome(nome);
@@ -262,69 +267,7 @@ public class GradeTamanhoService {
         return new OpcaoTamanhoResponseDTO(opcaoTamanhoRepository.save(opcao));
     }
     
-    @Transactional(readOnly = true)
-    public GradeTamanhoCategoriaProdutoResponseDTO buscarGradeDaCategoria(Long idCategoria) {
-
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-
-        return gradeTamanhoCategoriaProdutoRepository.findFirstByCategoriaIdAndAtivoTrue(categoria.getId())
-            .filter(a -> a.getGrade() == null || !a.getGrade().isExcluido())
-            .map(this::montarGradeTamanhoCategoriaProdutoResponse)
-            .orElse(null);
-    }
-
-    @Transactional
-    public GradeTamanhoCategoriaProdutoResponseDTO associarGradeACategoria(Long idCategoria, Long idGrade) {
-
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-        GradeTamanho grade = buscarObrigatoria(idGrade);
-
-        if (grade.isExcluido()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Grade de tamanhos excluída não pode ser associada à categoria");
-        }
-
-        validarMesmoEstabelecimento(categoria, grade);
-
-        gradeTamanhoCategoriaProdutoRepository.findFirstByCategoriaIdAndAtivoTrue(categoria.getId())
-            .filter(a -> a.getGrade() != null)
-            .filter(a -> !Objects.equals(a.getGrade().getId(), grade.getId()))
-            .ifPresent(a -> {
-                throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "Categoria já possui uma grade de tamanhos ativa"
-                );
-            });
-
-        GradeTamanhoCategoriaProduto associacao = gradeTamanhoCategoriaProdutoRepository
-            .findByCategoriaIdAndGradeId(categoria.getId(), grade.getId())
-            .orElseGet(GradeTamanhoCategoriaProduto::new);
-
-        associacao.setCategoria(categoria);
-        associacao.setGrade(grade);
-        associacao.setAtivo(true);
-
-        return montarGradeTamanhoCategoriaProdutoResponse(
-            gradeTamanhoCategoriaProdutoRepository.save(associacao)
-        );
-    }
-
-    @Transactional
-    public void desassociarGradeDaCategoria(Long idCategoria, Long idGrade) {
-
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-        GradeTamanho grade = buscarObrigatoria(idGrade);
-
-        validarMesmoEstabelecimento(categoria, grade);
-
-        GradeTamanhoCategoriaProduto associacao = gradeTamanhoCategoriaProdutoRepository
-            .findByCategoriaIdAndGradeId(categoria.getId(), grade.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grade não está associada à categoria"));
-
-        // Desassociação lógica preserva histórico/configuração.
-        associacao.setAtivo(false);
-
-        gradeTamanhoCategoriaProdutoRepository.save(associacao);
-    }
+    
 
     @Transactional(readOnly = true)
     public boolean categoriaPossuiGradeAtiva(Long idCategoria) {
@@ -333,67 +276,11 @@ public class GradeTamanhoService {
             return false;
         }
 
-        return gradeTamanhoCategoriaProdutoRepository.findFirstByCategoriaIdAndAtivoTrue(idCategoria)
-            .filter(a -> a.getGrade() != null)
-            .filter(a -> !a.getGrade().isExcluido())
+        return gradeTamanhoRepository
+            .findByCategoriaIdAndAtivoTrueAndExcluidoFalse(idCategoria)
             .isPresent();
     }
-
-    @Transactional
-    public GradeTamanho buscarOuCriarGradeUnicaDoEstabelecimento(Estabelecimento estabelecimento) {
-
-        if (estabelecimento == null || estabelecimento.getId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "estabelecimento é obrigatório");
-        }
-
-        return gradeTamanhoRepository
-            .findFirstByEstabelecimentoIdAndExcluidoFalseOrderByIdAsc(estabelecimento.getId())
-            .orElseGet(() -> {
-                GradeTamanho grade = new GradeTamanho();
-                grade.setEstabelecimento(estabelecimento);
-                grade.setNome("Grade de tamanhos");
-                grade.setDescricao("Tamanhos disponíveis para os produtos da loja");
-                grade.setAtivo(true);
-                grade.setExcluido(false);
-
-                // A loja trabalha com uma única grade global de tamanhos.
-                return gradeTamanhoRepository.save(grade);
-            });
-    }
-
-    @Transactional
-    public GradeTamanhoCategoriaProdutoResponseDTO associarGradeUnicaACategoria(
-        Estabelecimento estabelecimento,
-        Long idCategoria
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-        validarCategoriaDoEstabelecimento(categoria, estabelecimento);
-
-        GradeTamanho grade = buscarOuCriarGradeUnicaDoEstabelecimento(estabelecimento);
-
-        return associarGradeACategoria(categoria.getId(), grade.getId());
-    }
-
-    @Transactional
-    public void desassociarGradeUnicaDaCategoria(
-        Estabelecimento estabelecimento,
-        Long idCategoria
-    ) {
-
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-        validarCategoriaDoEstabelecimento(categoria, estabelecimento);
-
-        GradeTamanho grade = gradeTamanhoRepository
-            .findFirstByEstabelecimentoIdAndExcluidoFalseOrderByIdAsc(estabelecimento.getId())
-            .orElse(null);
-
-        if (grade == null) {
-            return;
-        }
-
-        desassociarGradeDaCategoria(categoria.getId(), grade.getId());
-    }
+    
 
     @Transactional(readOnly = true)
     public List<OpcaoTamanhoProdutoResponseDTO> listarPrecosDoProduto(
@@ -499,64 +386,30 @@ public class GradeTamanhoService {
     }
 
     private void validarProdutoPermiteOpcaoTamanho(
-        Produto produto,
-        OpcaoTamanho opcaoTamanho
-    ) {
+	    Produto produto,
+	    OpcaoTamanho opcaoTamanho
+	) {
 
-        if (produto.getCategoria() == null || produto.getCategoria().getId() == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Produto não possui categoria");
-        }
+	    GradeTamanho gradeAplicavel = buscarGradeAplicavelAoProduto(produto);
 
-        GradeTamanhoCategoriaProduto gradeCategoria = gradeTamanhoCategoriaProdutoRepository
-            .findFirstByCategoriaIdAndAtivoTrue(produto.getCategoria().getId())
-            .filter(a -> a.getGrade() != null)
-            .filter(a -> !a.getGrade().isExcluido())
-            .orElseThrow(() -> new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Categoria do produto não possui grade de tamanhos ativa"
-            ));
+	    if (gradeAplicavel == null) {
+	        throw new ResponseStatusException(
+	            HttpStatus.CONFLICT,
+	            "Produto não possui grade de tamanhos ativa"
+	        );
+	    }
 
-        Long idGradeCategoria = gradeCategoria.getGrade().getId();
-        Long idGradeOpcao = opcaoTamanho.getGrade() == null ? null : opcaoTamanho.getGrade().getId();
+	    Long idGradeAplicavel = gradeAplicavel.getId();
+	    Long idGradeOpcao = opcaoTamanho.getGrade() == null ? null : opcaoTamanho.getGrade().getId();
 
-        if (!Objects.equals(idGradeCategoria, idGradeOpcao)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Opção de tamanho não pertence à grade ativa da categoria do produto"
-            );
-        }
-    }
-
-    private GradeTamanhoCategoriaProdutoResponseDTO montarGradeTamanhoCategoriaProdutoResponse(
-        GradeTamanhoCategoriaProduto associacao
-    ) {
-
-        Long idGrade = associacao.getGrade() == null ? null : associacao.getGrade().getId();
-
-        Integer quantidadeOpcoes = idGrade == null
-            ? 0
-            : Math.toIntExact(opcaoTamanhoRepository.countByGradeId(idGrade));
-
-        return new GradeTamanhoCategoriaProdutoResponseDTO(associacao, quantidadeOpcoes);
-    }
-
-    private void validarMesmoEstabelecimento(CategoriaProduto categoria, GradeTamanho grade) {
-
-        Long idEstabelecimentoCategoria = categoria.getEstabelecimento() == null
-            ? null
-            : categoria.getEstabelecimento().getId();
-
-        Long idEstabelecimentoGrade = grade.getEstabelecimento() == null
-            ? null
-            : grade.getEstabelecimento().getId();
-
-        if (!Objects.equals(idEstabelecimentoCategoria, idEstabelecimentoGrade)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Grade de tamanhos não pertence ao mesmo estabelecimento da categoria"
-            );
-        }
-    }
+	    if (!Objects.equals(idGradeAplicavel, idGradeOpcao)) {
+	        throw new ResponseStatusException(
+	            HttpStatus.BAD_REQUEST,
+	            "Opção de tamanho não pertence à grade ativa do produto"
+	        );
+	    }
+	}
+    
 
     private void validarCategoriaDoEstabelecimento(
         CategoriaProduto categoria,
@@ -575,6 +428,26 @@ public class GradeTamanhoService {
                 "Categoria não pertence ao estabelecimento"
             );
         }
+    }
+    
+    @Transactional(readOnly = true)
+    public GradeTamanho buscarGradeAplicavelAoProduto(Produto produto) {
+
+        if (produto == null || produto.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "produto é obrigatório");
+        }
+
+        return gradeTamanhoRepository
+            .findByProdutoIdAndAtivoTrueAndExcluidoFalse(produto.getId())
+            .orElseGet(() -> {
+                if (produto.getCategoria() == null || produto.getCategoria().getId() == null) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "Produto não possui categoria");
+                }
+
+                return gradeTamanhoRepository
+                    .findByCategoriaIdAndAtivoTrueAndExcluidoFalse(produto.getCategoria().getId())
+                    .orElse(null);
+            });
     }
 
     private String normalizarTextoObrigatorio(String valor, String campo, int limite) {
@@ -625,5 +498,196 @@ public class GradeTamanhoService {
         }
 
         return valor;
+    }
+    
+    private void aplicarEscopoGrade(GradeTamanho grade, GradeTamanhoRequestDTO dto) {
+
+        boolean possuiCategoria = dto.getIdCategoria() != null;
+        boolean possuiProduto = dto.getIdProduto() != null;
+
+        if (possuiCategoria == possuiProduto) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "A grade deve estar associada a uma categoria ou a um produto"
+            );
+        }
+
+        if (possuiCategoria) {
+            CategoriaProduto categoria = buscarCategoriaObrigatoria(dto.getIdCategoria());
+            validarCategoriaDoEstabelecimento(categoria, grade.getEstabelecimento());
+
+            gradeTamanhoRepository.findByCategoriaIdAndAtivoTrueAndExcluidoFalse(categoria.getId())
+                .ifPresent(g -> {
+                    throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Categoria já possui uma grade de tamanhos ativa"
+                    );
+                });
+
+            grade.setCategoria(categoria);
+            grade.setProduto(null);
+            return;
+        }
+
+        Produto produto = buscarProdutoObrigatorio(dto.getIdProduto());
+        validarProdutoDoEstabelecimento(produto, grade.getEstabelecimento());
+
+        gradeTamanhoRepository.findByProdutoIdAndAtivoTrueAndExcluidoFalse(produto.getId())
+            .ifPresent(g -> {
+                throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Produto já possui uma grade de tamanhos ativa"
+                );
+            });
+
+        grade.setProduto(produto);
+        grade.setCategoria(null);
+    }
+
+    private void validarEscopoGrade(GradeTamanho grade) {
+
+        boolean possuiCategoria = grade.getCategoria() != null;
+        boolean possuiProduto = grade.getProduto() != null;
+
+        if (possuiCategoria == possuiProduto) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Grade de tamanho com escopo inválido"
+            );
+        }
+    }
+
+    private void validarProdutoDoEstabelecimento(
+        Produto produto,
+        Estabelecimento estabelecimento
+    ) {
+
+        Long idEstabelecimentoProduto = produto.getEstabelecimento() == null
+            ? null
+            : produto.getEstabelecimento().getId();
+
+        Long idEstabelecimento = estabelecimento == null ? null : estabelecimento.getId();
+
+        if (!Objects.equals(idEstabelecimentoProduto, idEstabelecimento)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Produto não pertence ao estabelecimento"
+            );
+        }
+    }
+    
+    
+    @Transactional(readOnly = true)
+    public GradeTamanho buscarGradeAtivaDaCategoria(Long idCategoria) {
+
+        if (idCategoria == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idCategoria é obrigatório");
+        }
+
+        return gradeTamanhoRepository
+            .findByCategoriaIdAndAtivoTrueAndExcluidoFalse(idCategoria)
+            .orElse(null);
+    }
+
+    @Transactional
+    public GradeTamanho buscarOuCriarGradeDaCategoria(
+        Estabelecimento estabelecimento,
+        Long idCategoria
+    ) {
+
+        if (estabelecimento == null || estabelecimento.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "estabelecimento é obrigatório");
+        }
+
+        GradeTamanho gradeExistente = buscarGradeAtivaDaCategoria(idCategoria);
+
+        if (gradeExistente != null) {
+            return gradeExistente;
+        }
+
+        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
+        validarCategoriaDoEstabelecimento(categoria, estabelecimento);
+
+        GradeTamanhoRequestDTO dto = new GradeTamanhoRequestDTO();
+        dto.setIdEstabelecimento(estabelecimento.getId());
+        dto.setIdCategoria(categoria.getId());
+        dto.setNome("Tamanhos - " + categoria.getNome());
+        dto.setDescricao("Tamanhos disponíveis para a categoria " + categoria.getNome());
+        dto.setAtivo(true);
+
+        GradeTamanhoResponseDTO response = salvarGrade(null, dto);
+
+        return buscarObrigatoria(response.getIdGrade());
+    }
+    
+    @Transactional(readOnly = true)
+    public GradeTamanho buscarGradeAtivaDoProduto(Long idProduto) {
+
+        if (idProduto == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idProduto é obrigatório");
+        }
+
+        return gradeTamanhoRepository
+            .findByProdutoIdAndAtivoTrueAndExcluidoFalse(idProduto)
+            .orElse(null);
+    }
+    
+    @Transactional
+    public OpcaoTamanho criarOpcaoExclusivaProduto(
+        Long idEstabelecimento,
+        Long idProduto,
+        String nomeOpcao
+    ) {
+
+        if (idEstabelecimento == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idEstabelecimento é obrigatório");
+        }
+
+        Produto produto = buscarProdutoObrigatorio(idProduto);
+        Estabelecimento estabelecimento = estabelecimentoService.buscar(idEstabelecimento);
+
+        validarProdutoDoEstabelecimento(produto, estabelecimento);
+
+        String nomeLimpo = normalizarTextoObrigatorio(nomeOpcao, "nome", 120);
+
+        GradeTamanho grade = gradeTamanhoRepository
+            .findByProdutoIdAndAtivoTrueAndExcluidoFalse(produto.getId())
+            .orElseGet(() -> {
+                GradeTamanhoRequestDTO dto = new GradeTamanhoRequestDTO();
+
+                dto.setIdEstabelecimento(estabelecimento.getId());
+                dto.setIdProduto(produto.getId());
+                dto.setNome("Tamanhos - " + produto.getNome());
+                dto.setDescricao("Tamanhos exclusivos do produto " + produto.getNome());
+                dto.setAtivo(true);
+
+                GradeTamanhoResponseDTO response = salvarGrade(null, dto);
+
+                return buscarObrigatoria(response.getIdGrade());
+            });
+
+        List<OpcaoTamanho> opcoesExistentes =
+            opcaoTamanhoRepository.findByGradeIdOrderByOrdemAscNomeAsc(grade.getId());
+
+        boolean nomeJaExiste = opcoesExistentes.stream()
+            .anyMatch(opcao -> opcao.getNome() != null && opcao.getNome().equalsIgnoreCase(nomeLimpo));
+
+        if (nomeJaExiste) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Já existe um tamanho com este nome para o produto"
+            );
+        }
+
+        OpcaoTamanho opcao = new OpcaoTamanho();
+
+        opcao.setGrade(grade);
+        opcao.setNome(nomeLimpo);
+        opcao.setDescricao(null);
+        opcao.setOrdem(opcoesExistentes.size() + 1);
+        opcao.setAtivo(true);
+
+        // A opção nasce dentro da grade exclusiva do produto para não afetar os demais produtos da categoria.
+        return opcaoTamanhoRepository.save(opcao);
     }
 }

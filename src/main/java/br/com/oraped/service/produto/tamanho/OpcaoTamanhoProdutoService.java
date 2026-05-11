@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import br.com.oraped.domain.produto.Produto;
+import br.com.oraped.domain.produto.tamanho.GradeTamanho;
 import br.com.oraped.domain.produto.tamanho.OpcaoTamanho;
 import br.com.oraped.domain.produto.tamanho.OpcaoTamanhoProduto;
 import br.com.oraped.dto.produto.tamanho.OpcaoTamanhoProdutoRequestDTO;
@@ -90,7 +91,7 @@ public class OpcaoTamanhoProdutoService {
         Produto produto = produtoService.buscarObrigatorio(dto.getIdProduto());
         OpcaoTamanho opcaoTamanho = gradeTamanhoService.buscarOpcaoObrigatoria(dto.getIdOpcaoTamanho());
 
-        validarOpcaoPertenceCategoriaDoProduto(produto, opcaoTamanho);
+        validarOpcaoPertenceGradeAplicavelAoProduto(produto, opcaoTamanho);
 
         OpcaoTamanhoProduto relacao = opcaoTamanhoProdutoRepository
             .findByProdutoIdAndOpcaoTamanhoId(produto.getId(), opcaoTamanho.getId())
@@ -121,7 +122,7 @@ public class OpcaoTamanhoProdutoService {
         Produto produto = produtoService.buscarObrigatorio(idProduto);
         OpcaoTamanho opcaoTamanho = gradeTamanhoService.buscarOpcaoObrigatoria(idOpcaoTamanho);
 
-        validarOpcaoPertenceCategoriaDoProduto(produto, opcaoTamanho);
+        validarOpcaoPertenceGradeAplicavelAoProduto(produto, opcaoTamanho);
 
         OpcaoTamanhoProduto relacao = opcaoTamanhoProdutoRepository
             .findByProdutoIdAndOpcaoTamanhoId(produto.getId(), opcaoTamanho.getId())
@@ -135,33 +136,30 @@ public class OpcaoTamanhoProdutoService {
         return new OpcaoTamanhoProdutoResponseDTO(opcaoTamanhoProdutoRepository.save(relacao));
     }
 
-    private void validarOpcaoPertenceCategoriaDoProduto(
-        Produto produto,
-        OpcaoTamanho opcaoTamanho
-    ) {
+    private void validarOpcaoPertenceGradeAplicavelAoProduto(
+	    Produto produto,
+	    OpcaoTamanho opcaoTamanho
+	) {
 
-        if (produto.getCategoria() == null || produto.getCategoria().getId() == null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Produto sem categoria associada");
-        }
+	    GradeTamanho gradeAplicavel = gradeTamanhoService.buscarGradeAplicavelAoProduto(produto);
 
-        var gradeCategoria = gradeTamanhoService.buscarGradeDaCategoria(produto.getCategoria().getId());
+	    if (gradeAplicavel == null) {
+	        throw new ResponseStatusException(
+	            HttpStatus.CONFLICT,
+	            "Produto não possui grade de tamanhos ativa"
+	        );
+	    }
 
-        if (gradeCategoria == null) {
-            throw new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Categoria do produto não possui grade de tamanhos ativa"
-            );
-        }
+	    Long idGradeAplicavel = gradeAplicavel.getId();
+	    Long idGradeOpcao = opcaoTamanho.getGrade() == null ? null : opcaoTamanho.getGrade().getId();
 
-        Long idGradeOpcao = opcaoTamanho.getGrade() == null ? null : opcaoTamanho.getGrade().getId();
-
-        if (!Objects.equals(gradeCategoria.getIdGrade(), idGradeOpcao)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Opção de tamanho não pertence à grade ativa da categoria do produto"
-            );
-        }
-    }
+	    if (!Objects.equals(idGradeAplicavel, idGradeOpcao)) {
+	        throw new ResponseStatusException(
+	            HttpStatus.BAD_REQUEST,
+	            "Opção de tamanho não pertence à grade ativa do produto"
+	        );
+	    }
+	}
 
     private BigDecimal normalizarPrecoObrigatorio(BigDecimal valor) {
 

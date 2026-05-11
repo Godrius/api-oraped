@@ -16,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.enums.StatusPedido;
 import br.com.oraped.domain.pedido.ItemPedido;
+import br.com.oraped.domain.pedido.ItemPedidoOpcional;
 import br.com.oraped.domain.pedido.Pedido;
 import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
@@ -34,6 +35,63 @@ public class AdminPedidoService {
 
     private final PedidoService pedidoService;
     private final AdminWhatsappUiHelper sup;
+
+    
+    public AdministradorWhatsappResultados.ResultadoAdmin montarMenuPedidos(
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin
+	) {
+
+	    sup.validarBasico(estabelecimento, whatsappAdmin);
+
+	    String cabecalho =
+	        "📦 *Pedidos*\n\n" +
+	            "Acompanhe os pedidos por etapa:\n\n" +
+	            "Escolha uma opção:";
+
+	    List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
+
+	    itens.add(sup.row(
+	        "COMANDO|ADMIN_VER_PEDIDOS|CRIADO|0",
+	        "📥 Abertos",
+	        "Aguardando aceite"
+	    ));
+
+	    itens.add(sup.row(
+	        "COMANDO|ADMIN_VER_PEDIDOS|EM_PREPARO|0",
+	        "👨‍🍳 Em preparo",
+	        "Pedidos em produção"
+	    ));
+
+	    itens.add(sup.row(
+	        "COMANDO|ADMIN_VER_PEDIDOS|PRONTO|0",
+	        "🛵 Em entrega",
+	        "Pedidos em rota"
+	    ));
+
+	    itens.add(sup.row(
+	        "COMANDO|ADMIN_VER_PEDIDOS|ENTREGUE|0",
+	        "✅ Entregues",
+	        "Histórico finalizado"
+	    ));
+
+	    itens.add(sup.row(
+	        "COMANDO|ADMIN_MENU",
+	        "⬅️ Voltar",
+	        "Menu do administrador"
+	    ));
+
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_pedidos_menu",
+	        sup.msg().lista(
+	            whatsappAdmin,
+	            sup.msg().truncWord(cabecalho, 1024),
+	            "Ver pedidos",
+	            "Pedidos",
+	            itens
+	        )
+	    );
+	}
 
     public MensagemWhatsappSaidaDTO montarNotificacaoPedidoParaAdmin(
         String whatsappAdmin,
@@ -136,44 +194,42 @@ public class AdminPedidoService {
     }
 
     private String montarTextoNotificacaoMudancaPedido(
-        Long idPedido,
-        String whatsappCliente,
-        String motivo,
-        StatusPedido statusAtual,
-        String resumoItens,
-        BigDecimal total
-    ) {
+	    Long idPedido,
+	    String whatsappCliente,
+	    String motivo,
+	    StatusPedido statusAtual,
+	    String resumoItens,
+	    BigDecimal total
+	) {
 
-        String cliente = StringUtils.hasText(whatsappCliente)
-            ? sup.msg().safe(whatsappCliente)
-            : "(não informado)";
+	    String cliente = StringUtils.hasText(whatsappCliente)
+	        ? sup.msg().safe(whatsappCliente)
+	        : "(não informado)";
 
-        String motivoFmt = StringUtils.hasText(motivo)
-            ? sup.msg().safe(motivo)
-            : "Pedido atualizado pelo cliente";
+	    String motivoFmt = StringUtils.hasText(motivo)
+	        ? sup.msg().safe(motivo)
+	        : "Pedido atualizado pelo cliente";
 
-        String statusFmt = (statusAtual == null)
-            ? "N/D"
-            : formatarStatusParaExibicao(statusAtual);
+	    String statusFmt = statusAtual == null
+	        ? "N/D"
+	        : formatarStatusParaExibicao(statusAtual);
 
-        String itens = sup.msg().safe(resumoItens);
-        if (!StringUtils.hasText(itens)) {
-            itens = "(sem itens)";
-        }
+	    String itens = sup.msg().safe(resumoItens);
+	    itens = StringUtils.hasText(itens) ? itens : "(sem itens)";
 
-        BigDecimal t = (total == null ? BigDecimal.ZERO : total);
+	    BigDecimal t = total == null ? BigDecimal.ZERO : total;
 
-        return
-            "🔔 *Mudança no pedido*\n\n" +
-                "*Pedido:* #" + idPedido + "\n" +
-                "*Cliente:* " + cliente + "\n" +
-                "*Ação:* " + motivoFmt + "\n" +
-                "*Status:* " + statusFmt + "\n\n" +
-                "*Itens:*\n" +
-                sup.msg().trunc(itens, 650) + "\n\n" +
-                "*Total:* " + sup.msg().formatarMoeda(t);
-    }
-
+	    return
+	        "🔔 *Mudança no pedido*\n\n" +
+	            "📌 *Pedido:* #" + idPedido + "\n" +
+	            "👤 *Cliente:* " + cliente + "\n" +
+	            "📍 *Ação:* " + motivoFmt + "\n" +
+	            "⏳ *Status:* " + statusFmt + "\n\n" +
+	            "🛒 *Itens:*\n" +
+	            sup.msg().trunc(itens, 1400) + "\n\n" +
+	            "💰 *Total:* " + sup.msg().formatarMoeda(t);
+	}
+    
     public AdministradorWhatsappResultados.ResultadoAdmin listarPedidosPorStatus(
         Estabelecimento estabelecimento,
         String whatsappAdmin,
@@ -229,10 +285,10 @@ public class AdminPedidoService {
             .filter(Objects::nonNull)
             .sorted(Comparator.comparing(Pedido::getId).reversed())
             .map(p -> sup.row(
-                "COMANDO|ADMIN_PEDIDO_DETALHE|" + p.getId(),
-                sup.msg().trunc("#" + p.getId() + " • " + sup.msg().formatarMoeda(p.getTotal()), 24),
-                sup.msg().trunc(montarDescricaoPedidoLista(p), 72)
-            ))
+        	    "COMANDO|ADMIN_PEDIDO_DETALHE|" + p.getId(),
+        	    sup.msg().trunc("#" + p.getId() + " • " + sup.msg().formatarMoeda(p.getTotal()), 24),
+        	    sup.msg().trunc(montarDescricaoPedidoLista(p), 220)
+        	))
             .collect(Collectors.toList());
 
         if (temProximaPagina) {
@@ -277,15 +333,14 @@ public class AdminPedidoService {
                 }
             }
 
-        } else {
-
-            if (StringUtils.hasText(p.getEnderecoEntrega()) && pareceEndereco(p.getEnderecoEntrega())) {
-                extra = sup.msg().safe(p.getEnderecoEntrega());
-            }
+        } else if (StringUtils.hasText(p.getEnderecoEntrega()) && pareceEndereco(p.getEnderecoEntrega())) {
+            extra = sup.msg().safe(p.getEnderecoEntrega());
         }
 
         return "Cliente: " + cliente + (StringUtils.hasText(extra) ? (" | " + extra) : "");
     }
+       
+    
 
     private boolean pareceEndereco(String s) {
 
@@ -471,29 +526,67 @@ public class AdminPedidoService {
 
     public String montarResumoItensDoPedido(Pedido pedido) {
 
-        if (pedido == null || pedido.getItens() == null || pedido.getItens().isEmpty()) return "(sem itens)";
+        if (pedido == null || pedido.getItens() == null || pedido.getItens().isEmpty()) {
+            return "(sem itens)";
+        }
 
         StringBuilder sb = new StringBuilder();
 
         for (ItemPedido it : pedido.getItens()) {
 
-            if (it == null) continue;
-
-            Produto p = it.getProduto();
-            String nome = (p == null ? "Produto" : sup.msg().safe(p.getNome()));
-
-            int qtd = it.getQuantidade() == null ? 0 : it.getQuantidade();
-
-            BigDecimal subtotalItem = it.getSubtotalItem();
-            if (subtotalItem == null) {
-                BigDecimal unit = it.getPrecoUnitarioProduto() == null ? BigDecimal.ZERO : it.getPrecoUnitarioProduto();
-                subtotalItem = unit.multiply(BigDecimal.valueOf(qtd));
+            if (it == null) {
+                continue;
             }
 
-            sb.append("- ").append(nome)
-                .append(" x").append(qtd)
-                .append(" = ").append(sup.msg().formatarMoeda(subtotalItem))
+            Produto produto = it.getProduto();
+
+            String categoria =
+                produto != null
+                    && produto.getCategoria() != null
+                    && StringUtils.hasText(produto.getCategoria().getNome())
+                        ? sup.msg().safe(produto.getCategoria().getNome())
+                        : "Sem categoria";
+
+            String nomeProduto =
+                produto != null && StringUtils.hasText(produto.getNome())
+                    ? sup.msg().safe(produto.getNome())
+                    : "Produto";
+
+            String tamanho = extrairDescricaoTamanho(it);
+
+            int qtd = it.getQuantidade() == null
+                ? 0
+                : it.getQuantidade();
+
+            BigDecimal subtotal = calcularSubtotalItem(it);
+
+            sb.append("▸ ")
+	            .append(categoria)
+	            .append("\n");
+
+            sb.append(nomeProduto);
+
+            if (StringUtils.hasText(tamanho)) {
+                sb.append(" • ").append(tamanho);
+            }
+
+            sb.append("\n");
+
+            sb.append("Qtd: ")
+                .append(qtd)
+                .append(" • ")
+                .append(sup.msg().formatarMoeda(subtotal))
                 .append("\n");
+
+            List<String> complementos = extrairComplementos(it);
+
+            for (String comp : complementos) {
+                sb.append("↳ ")
+                    .append(comp)
+                    .append("\n");
+            }
+
+            sb.append("\n");
         }
 
         return sb.toString().trim();
@@ -561,4 +654,102 @@ public class AdminPedidoService {
 
 	    return null;
 	}
+    
+    
+    private String extrairDescricaoTamanho(ItemPedido item) {
+
+        if (item == null || !StringUtils.hasText(item.getNomeTamanho())) {
+            return "";
+        }
+
+        return sup.msg().safe(item.getNomeTamanho());
+    }
+
+    private List<String> extrairComplementos(ItemPedido item) {
+
+        if (item == null
+            || item.getOpcionais() == null
+            || item.getOpcionais().isEmpty()) {
+
+            return List.of();
+        }
+
+        return item.getOpcionais().stream()
+            .filter(Objects::nonNull)
+            .map(opcional -> {
+
+                String nome = StringUtils.hasText(opcional.getNome())
+                    ? sup.msg().safe(opcional.getNome())
+                    : "Opcional";
+
+                Integer quantidade = opcional.getQuantidade() == null
+                    ? 0
+                    : opcional.getQuantidade();
+
+                BigDecimal subtotalOpcional = opcional.getPrecoUnitario() == null
+                    ? BigDecimal.ZERO
+                    : opcional.getPrecoUnitario()
+                        .multiply(BigDecimal.valueOf(Math.max(quantidade, 0)));
+
+                StringBuilder sb = new StringBuilder();
+
+                sb.append(quantidade)
+                    .append("x ")
+                    .append(nome);
+
+                if (subtotalOpcional.compareTo(BigDecimal.ZERO) > 0) {
+                    sb.append(" • ")
+                        .append(sup.msg().formatarMoeda(subtotalOpcional));
+                }
+
+                return sup.msg().trunc(sb.toString(), 120);
+            })
+            .collect(Collectors.toList());
+    }
+
+    private BigDecimal calcularSubtotalItem(ItemPedido item) {
+
+        if (item == null) {
+            return BigDecimal.ZERO;
+        }
+
+        // Prioriza o subtotal persistido no snapshot do pedido.
+        if (item.getSubtotalItem() != null) {
+            return item.getSubtotalItem();
+        }
+
+        BigDecimal precoUnitario = item.getPrecoUnitarioProduto() == null
+            ? BigDecimal.ZERO
+            : item.getPrecoUnitarioProduto();
+
+        Integer quantidade = item.getQuantidade() == null
+            ? 0
+            : item.getQuantidade();
+
+        BigDecimal subtotal = precoUnitario.multiply(
+            BigDecimal.valueOf(Math.max(quantidade, 0))
+        );
+
+        if (item.getOpcionais() != null) {
+
+            for (ItemPedidoOpcional opcional : item.getOpcionais()) {
+
+                if (opcional == null || opcional.getPrecoUnitario() == null) {
+                    continue;
+                }
+
+                Integer qtdOpcional = opcional.getQuantidade() == null
+                    ? 0
+                    : opcional.getQuantidade();
+
+                subtotal = subtotal.add(
+                    opcional.getPrecoUnitario()
+                        .multiply(BigDecimal.valueOf(Math.max(qtdOpcional, 0)))
+                );
+            }
+        }
+
+        return subtotal;
+    }
+    
 }

@@ -189,116 +189,103 @@ public class RoteamentoCatalogoClienteService {
     }
 
     private RoteamentoResultado selecionarProduto(
-        Estabelecimento estabelecimento,
-        String whatsappCliente,
-        Long idSessao,
-        ComandoWhatsapp cmd
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappCliente,
+	    Long idSessao,
+	    ComandoWhatsapp cmd
+	) {
 
-        Long idCategoria = parse.parseLongObrigatorio(
-            cmd.getParte(2),
-            "idCategoria"
-        );
+	    Long idCategoria = parse.parseLongObrigatorio(
+	        cmd.getParte(2),
+	        "idCategoria"
+	    );
 
-        Integer quantidadeMultipla = parse.parseIntObrigatorio(
-            cmd.getParte(3),
-            "quantidadeMultipla"
-        );
+	    Integer quantidadeMultipla = parse.parseIntObrigatorio(
+	        cmd.getParte(3),
+	        "quantidadeMultipla"
+	    );
 
-        Long idProduto = parse.parseLongObrigatorio(
-            cmd.getParte(4),
-            "idProduto"
-        );
+	    Long idProduto = parse.parseLongObrigatorio(
+	        cmd.getParte(4),
+	        "idProduto"
+	    );
 
-        Produto produto = menus.getProduto(estabelecimento, idProduto);
+	    Produto produto = menus.getProduto(estabelecimento, idProduto);
 
-        MensagemWhatsappSaidaDTO proximaMensagem;
+	    MensagemWhatsappSaidaDTO proximaMensagem;
 
-        /*
-         * Produtos com grade de tamanho iniciam a montagem imediatamente,
-         * porque o tamanho escolhido será usado depois no cálculo,
-         * no cabeçalho dos menus e na persistência do carrinho.
-         */
-        if (menus.produtoPossuiTamanhos(produto)) {
+	    if (menus.produtoPossuiTamanhos(produto)) {
 
-            itemEmMontagemService.iniciarMontagem(
-                idSessao,
-                idProduto,
-                idCategoria,
-                quantidadeMultipla
-            );
+	        itemEmMontagemService.iniciarMontagem(
+	            idSessao,
+	            idProduto,
+	            idCategoria,
+	            quantidadeMultipla
+	        );
 
-            proximaMensagem = menus.montarListaTamanhosProduto(
-                estabelecimento,
-                whatsappCliente,
-                idSessao,
-                idCategoria,
-                quantidadeMultipla,
-                idProduto
-            );
+	        proximaMensagem = menus.montarListaTamanhosProduto(
+	            estabelecimento,
+	            whatsappCliente,
+	            idSessao,
+	            idCategoria,
+	            quantidadeMultipla,
+	            idProduto
+	        );
 
-        } else if (menus.produtoPossuiComplementosPorCategoria(produto)) {
+	    } else if (menus.produtoPossuiComplementos(produto)) {
 
-            itemEmMontagemService.iniciarMontagem(
-                idSessao,
-                idProduto,
-                idCategoria,
-                quantidadeMultipla
-            );
+	        itemEmMontagemService.iniciarMontagem(
+	            idSessao,
+	            idProduto,
+	            idCategoria,
+	            quantidadeMultipla
+	        );
 
-            proximaMensagem = menus.montarListaComplementosEmMontagem(
-                estabelecimento,
-                whatsappCliente,
-                idSessao
-            );
+	        proximaMensagem = menus.montarListaComplementosEmMontagem(
+	            estabelecimento,
+	            whatsappCliente,
+	            idSessao
+	        );
 
-        } else {
+	    } else {
 
-            proximaMensagem = menus.montarSelecaoProduto(
-                estabelecimento,
-                whatsappCliente,
-                idSessao,
-                idCategoria,
-                quantidadeMultipla,
-                idProduto
-            );
-        }
+	        proximaMensagem = menus.montarSelecaoProduto(
+	            estabelecimento,
+	            whatsappCliente,
+	            idSessao,
+	            idCategoria,
+	            quantidadeMultipla,
+	            idProduto
+	        );
+	    }
 
-        // Sem imagem, segue direto para o próximo passo do fluxo.
-        if (produto == null || !StringUtils.hasText(produto.getUrlFoto())) {
+	    if (produto == null || !StringUtils.hasText(produto.getUrlFoto())) {
+	        return new RoteamentoResultado(
+	            "selecionar_produto",
+	            proximaMensagem
+	        );
+	    }
 
-            return new RoteamentoResultado(
-                "selecionar_produto",
-                proximaMensagem
-            );
-        }
+	    MensagemWhatsappSaidaDTO imagemProduto =
+	        menus.montarImagemProdutoAntesDasQuantidades(
+	            estabelecimento,
+	            whatsappCliente,
+	            idProduto
+	        );
 
-        MensagemWhatsappSaidaDTO imagemProduto =
-            menus.montarImagemProdutoAntesDasQuantidades(
-                estabelecimento,
-                whatsappCliente,
-                idProduto
-            );
+	    if (imagemProduto != null) {
+	        return new RoteamentoResultado(
+	            "selecionar_produto_com_imagem",
+	            imagemProduto,
+	            List.of(proximaMensagem)
+	        );
+	    }
 
-        /*
-         * Com imagem, enviamos:
-         * 1) imagem do produto
-         * 2) próxima etapa do fluxo
-         */
-        if (imagemProduto != null) {
-
-            return new RoteamentoResultado(
-                "selecionar_produto_com_imagem",
-                imagemProduto,
-                List.of(proximaMensagem)
-            );
-        }
-
-        return new RoteamentoResultado(
-            "selecionar_produto",
-            proximaMensagem
-        );
-    }
+	    return new RoteamentoResultado(
+	        "selecionar_produto",
+	        proximaMensagem
+	    );
+	}
 
     private RoteamentoResultado escolherOutroProduto(
         Estabelecimento estabelecimento,

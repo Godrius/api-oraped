@@ -97,7 +97,8 @@ public class RoteamentoAdminCategoriaService {
                         estabelecimento,
                         whatsappAdmin,
                         idCategoria,
-                        offset
+                        offset,
+                        null
                     );
 
                 return new RoteamentoResultado(r.chave, r.mensagem);

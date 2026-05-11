@@ -241,9 +241,13 @@ public class ProdutoService {
     @Transactional
     public void excluir(Long idProduto) {
 
-        Produto p = buscarObrigatorio(idProduto);
+        Produto produto = buscarObrigatorio(idProduto);
 
-        produtoRepository.delete(p);
+        produto.setExcluido(true);
+        produto.setDataExclusao(java.time.OffsetDateTime.now());
+        produto.setDisponivelParaVenda(false);
+
+        produtoRepository.save(produto);
     }
 
     @Transactional(readOnly = true)

@@ -269,22 +269,6 @@ public class RoteamentoAdminGrupoComplementoService {
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
 
-            case "ADMIN_COMP_COMPLEMENTO_PRECO_MENU": {
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(2), "idGrupo");
-                Integer offsetGrupos = parse.parseIntDefaultZero(cmd.getParte(3));
-                Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(4), "idComplemento");
-
-                var r = adminGrupoComplementoService.montarMenuPrecoComplementoGlobal(
-                    estabelecimento,
-                    whatsappAdmin,
-                    idGrupo,
-                    offsetGrupos,
-                    idComplemento
-                );
-
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
-
             case "ADMIN_COMP_COMPLEMENTO_PRECO_MANUAL": {
                 Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(2), "idGrupo");
                 Integer offsetGrupos = parse.parseIntDefaultZero(cmd.getParte(3));
@@ -302,23 +286,7 @@ public class RoteamentoAdminGrupoComplementoService {
                 return new RoteamentoResultado(r.chave, r.mensagem);
             }
 
-            case "ADMIN_COMP_COMPLEMENTO_PRECO_APLICAR": {
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(2), "idGrupo");
-                Integer offsetGrupos = parse.parseIntDefaultZero(cmd.getParte(3));
-                Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(4), "idComplemento");
-                Integer deltaCentavos = parse.parseIntDefaultZeroAllowNegative(cmd.getParte(5));
-
-                var r = adminGrupoComplementoService.aplicarDeltaPrecoComplementoGlobal(
-                    estabelecimento,
-                    whatsappAdmin,
-                    idGrupo,
-                    offsetGrupos,
-                    idComplemento,
-                    deltaCentavos
-                );
-
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+            
 
             default:
                 return null;

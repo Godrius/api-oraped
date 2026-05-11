@@ -1,5 +1,6 @@
 package br.com.oraped.repository.produto.tamanho;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -16,4 +17,6 @@ public interface OpcaoTamanhoProdutoRepository extends JpaRepository<OpcaoTamanh
     Optional<OpcaoTamanhoProduto> findByProdutoIdAndOpcaoTamanhoId(Long idProduto, Long idOpcaoTamanho);
 
     boolean existsByProdutoIdAndOpcaoTamanhoId(Long idProduto, Long idOpcaoTamanho);
+    
+    boolean existsByProdutoIdAndAtivoTrueAndPrecoGreaterThan(Long idProduto, BigDecimal preco);
 }

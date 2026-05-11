@@ -1,7 +1,5 @@
 package br.com.oraped.service.whatsapp.administrador;
 
-import java.util.List;
-
 import org.springframework.stereotype.Service;
 
 import br.com.oraped.domain.Estabelecimento;
@@ -27,52 +25,42 @@ public class AdminLojaService {
 
     private final EstabelecimentoService estabelecimentoService;
     private final AdminWhatsappUiHelper sup;
-
+    private final MenuAdminService menuAdminService;
     
     public AdministradorWhatsappResultados.ResultadoAdmin abrirLoja(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin
+	) {
 
-        sup.validarBasico(estabelecimento, whatsappAdmin);
+	    sup.validarBasico(estabelecimento, whatsappAdmin);
 
-        estabelecimentoService.abrir(estabelecimento.getId());
+	    estabelecimentoService.abrir(estabelecimento.getId());
 
-        String corpo =
-            "✅ Loja *aberta*.\n\n" +
-                "O estabelecimento agora está aceitando pedidos.";
+	    // Atualiza o objeto em memória para o menu refletir o novo estado imediatamente.
+	    estabelecimento.setAberto(true);
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_loja_aberta",
-            sup.msg().botoes(
-                whatsappAdmin,
-                sup.msg().trunc(corpo, 1024),
-                List.of(sup.btn("COMANDO|ADMIN_MENU", "🛠️ Menu admin"))
-            )
-        );
-    }
+	    return menuAdminService.montarMenuAdmin(
+	        estabelecimento,
+	        whatsappAdmin
+	    );
+	}
 
     
     public AdministradorWhatsappResultados.ResultadoAdmin fecharLoja(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin
+	) {
 
-        sup.validarBasico(estabelecimento, whatsappAdmin);
+	    sup.validarBasico(estabelecimento, whatsappAdmin);
 
-        estabelecimentoService.fechar(estabelecimento.getId());
+	    estabelecimentoService.fechar(estabelecimento.getId());
 
-        String corpo =
-            "✅ Loja *fechada*.\n\n" +
-                "O estabelecimento não aceitará novos pedidos.";
+	    // Atualiza o objeto em memória para o menu refletir o novo estado imediatamente.
+	    estabelecimento.setAberto(false);
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_loja_fechada",
-            sup.msg().botoes(
-                whatsappAdmin,
-                sup.msg().trunc(corpo, 1024),
-                List.of(sup.btn("COMANDO|ADMIN_MENU", "🛠️ Menu admin"))
-            )
-        );
-    }
+	    return menuAdminService.montarMenuAdmin(
+	        estabelecimento,
+	        whatsappAdmin
+	    );
+	}
 }

@@ -13,6 +13,10 @@ public class GradeTamanhoResponseDTO {
 
     private Long idGrade;
     private Long idEstabelecimento;
+    private Long idCategoria;
+    private String nomeCategoria;
+    private Long idProduto;
+    private String nomeProduto;
     private String nome;
     private String descricao;
     private boolean ativo;
@@ -28,6 +32,16 @@ public class GradeTamanhoResponseDTO {
 
         if (grade.getEstabelecimento() != null) {
             this.idEstabelecimento = grade.getEstabelecimento().getId();
+        }
+
+        if (grade.getCategoria() != null) {
+            this.idCategoria = grade.getCategoria().getId();
+            this.nomeCategoria = grade.getCategoria().getNome();
+        }
+
+        if (grade.getProduto() != null) {
+            this.idProduto = grade.getProduto().getId();
+            this.nomeProduto = grade.getProduto().getNome();
         }
 
         this.nome = grade.getNome();

@@ -38,6 +38,11 @@ import lombok.RequiredArgsConstructor;
  * - remove foto
  * - exclui produto
  *
+ * Regra:
+ * - quando houver grade aplicável ao produto, o preço é configurado por tamanho
+ * - a grade aplicável pode vir do próprio produto ou da categoria
+ * - quando não houver grade aplicável, Produto.preco é usado como preço único
+ *
  * Utilização:
  * Deve ser chamado pelo roteamento administrativo de produtos.
  * A navegação de categorias/listas fica em AdminCategoriaService.
@@ -52,7 +57,7 @@ public class AdminProdutoService {
     private final WhatsappCloudMediaClient whatsappCloudMediaClient;
     private final HostingerClient hostingerClient;
     private final AdminCategoriaService adminCategoriaService;
-    private final AdminTamanhoService adminTamanhoService;
+    private final AdminTamanhoProdutoService adminTamanhoProdutoService;
     private final GradeTamanhoService gradeTamanhoService;
     private final AdminWhatsappUiHelper sup;
 
@@ -78,8 +83,8 @@ public class AdminProdutoService {
 	        idCategoria
 	    );
 
-	    boolean categoriaUsaGrade =
-	        gradeTamanhoService.categoriaPossuiGradeAtiva(idCategoria);
+	    boolean produtoUsaGrade =
+	    	    gradeTamanhoService.buscarGradeAplicavelAoProduto(produto) != null;
 
 	    String nome =
 	        sup.msg().trunc(
@@ -93,7 +98,7 @@ public class AdminProdutoService {
 	        descricao = "Sem descrição.";
 	    }
 
-	    String preco = categoriaUsaGrade
+	    String preco = produtoUsaGrade
 	        ? "Por tamanho"
 	        : sup.msg().formatarMoeda(produto.getPreco());
 
@@ -131,33 +136,13 @@ public class AdminProdutoService {
 
 	    List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
 
-	    if (categoriaUsaGrade) {
-	        itens.add(sup.row(
-	            "COMANDO|ADMIN_PROD_TAMANHOS_PRECOS|" +
-	                idProduto + "|" +
-	                idCategoria + "|" +
-	                safeOffset + "|0",
-	            "Preços tamanhos",
-	            "Preço por tamanho"
-	        ));
-	    } else {
-	        itens.add(sup.row(
-	            "COMANDO|ADMIN_PROD_PRECO_MENU|" +
-	                idProduto + "|" +
-	                idCategoria + "|" +
-	                safeOffset,
-	            "Ajustar preço",
-	            "Incrementos ou informar valor"
-	        ));
-	    }
-
 	    itens.add(sup.row(
 	        "COMANDO|ADMIN_PROD_NOME_MENU|" +
 	            idProduto + "|" +
 	            idCategoria + "|" +
 	            safeOffset,
-	        "Ajustar nome",
-	        "Enviar 1 mensagem com o novo nome"
+	        "✏️ Ajustar nome",
+	        "Enviar novo nome do produto"
 	    ));
 
 	    itens.add(sup.row(
@@ -165,17 +150,55 @@ public class AdminProdutoService {
 	            idProduto + "|" +
 	            idCategoria + "|" +
 	            safeOffset,
-	        "Ajustar descrição",
-	        "Enviar 1 mensagem com a nova descrição"
+	        "📝 Ajustar descrição",
+	        "Enviar nova descrição"
 	    ));
+
+	    if (produtoUsaGrade) {
+	        itens.add(sup.row(
+	            "COMANDO|ADMIN_PROD_TAMANHOS_PRECOS|" +
+	                idProduto + "|" +
+	                idCategoria + "|" +
+	                safeOffset + "|0",
+	            "💲 Ajustar preços",
+	            "Preço por tamanho"
+	        ));
+	    } else {
+	        itens.add(sup.row(
+	            "COMANDO|ADMIN_PROD_PRECO_MANUAL|" +
+	                idProduto + "|" +
+	                idCategoria + "|" +
+	                safeOffset,
+	            "💲 Ajustar preço",
+	            "Enviar novo valor"
+	        ));
+	    }
+	    
+	    itens.add(sup.row(
+    	    "COMANDO|ADMIN_PROD_TAMANHOS_MENU|" +
+    	        idProduto + "|" +
+    	        idCategoria + "|" +
+    	        safeOffset,
+    	    "📏 Variações de tamanhos",
+    	    "Tamanhos só deste produto"
+    	));
+
+    	itens.add(sup.row(
+    	    "COMANDO|ADMIN_PROD_COMPLEMENTOS_MENU|" +
+    	        idProduto + "|" +
+    	        idCategoria + "|" +
+    	        safeOffset,
+    	    "➕ Associar complementos",
+    	    "Complementos só deste produto"
+    	));
 
 	    itens.add(sup.row(
 	        "COMANDO|ADMIN_PROD_FOTO_MENU|" +
 	            idProduto + "|" +
 	            idCategoria + "|" +
 	            safeOffset,
-	        "Atualizar foto",
-	        "Enviar 1 foto do produto"
+	        "🖼️ Atualizar foto",
+	        "Enviar nova foto do produto"
 	    ));
 
 	    if (temFoto) {
@@ -184,8 +207,8 @@ public class AdminProdutoService {
 	                idProduto + "|" +
 	                idCategoria + "|" +
 	                safeOffset,
-	            "Remover foto",
-	            "Apagar a foto atual do produto"
+	            "🗑️ Remover foto",
+	            "Apagar foto atual"
 	        ));
 	    }
 
@@ -194,8 +217,8 @@ public class AdminProdutoService {
 	            idProduto + "|" +
 	            idCategoria + "|" +
 	            safeOffset,
-	        "Excluir produto",
-	        "Remover do cardápio"
+	        "❌ Excluir produto",
+	        "Remover produto do cardápio"
 	    ));
 
 	    itens.add(sup.row(
@@ -482,7 +505,7 @@ public class AdminProdutoService {
 
         // Após alteração rápida, volta para a lista de produtos da categoria.
         AdministradorWhatsappResultados.ResultadoAdmin lista =
-        	    adminCategoriaService.montarListaProdutosPorCategoria(estabelecimento, whatsappAdmin, idCategoria, safeOffset);
+        	    adminCategoriaService.montarListaProdutosPorCategoria(estabelecimento, whatsappAdmin, idCategoria, safeOffset, null);
 
         String descricao = sup.msg().safe(produto.getDescricao());
         if (!StringUtils.hasText(descricao)) {
@@ -498,36 +521,76 @@ public class AdminProdutoService {
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin iniciarPrecoManualProdutoPorDigitacao(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idSessao,
-        Long idProduto,
-        Long idCategoria,
-        Integer offsetLista
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idSessao,
+	    Long idProduto,
+	    Long idCategoria,
+	    Integer offsetLista
+	) {
 
-        validarSessao(idSessao);
-        int safeOffset = normalizarOffset(offsetLista);
-        Produto produto = buscarProdutoValidado(estabelecimento, idProduto, idCategoria);
+	    validarSessao(idSessao);
 
-        sessaoAdminProdutoService.marcarAguardandoNovoPreco(idSessao, idProduto, idCategoria, safeOffset);
+	    int safeOffset = normalizarOffset(offsetLista);
 
-        String corpo =
-            "💲 *Ajustar preço*\n\n" +
-                "*" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*\n\n" +
-                "Agora envie apenas o *novo preço*.\n\n" +
-                "Exemplos:\n" +
-                "- 10\n" +
-                "- 10,50\n" +
-                "- R$ 10,50";
+	    Produto produto = buscarProdutoValidado(
+	        estabelecimento,
+	        idProduto,
+	        idCategoria
+	    );
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_prod_preco_digitacao",
-            sup.msg().texto(whatsappAdmin, sup.msg().trunc(corpo, 1024))
-        );
-    }
+	    sessaoAdminProdutoService.marcarAguardandoNovoPreco(
+	        idSessao,
+	        idProduto,
+	        idCategoria,
+	        safeOffset
+	    );
 
-    public AdministradorWhatsappResultados.ResultadoAdminPreco concluirPrecoManualProdutoPorDigitacao(
+	    String precoAtual = sup.msg().formatarMoeda(
+	        produto.getPreco()
+	    );
+
+	    String descricao = StringUtils.hasText(produto.getDescricao())
+	        ? sup.msg().safe(produto.getDescricao())
+	        : "Sem descrição.";
+
+	    String corpo =
+	        "💲 *Ajustar preço*\n\n" +
+	            "*" +
+	            sup.msg().trunc(
+	                sup.msg().safe(produto.getNome()),
+	                80
+	            ) +
+	            "*\n" +
+	            sup.msg().trunc(descricao, 300) +
+	            "\n\n" +
+	            "*Preço atual:* " + precoAtual + "\n\n" +
+	            "Agora envie apenas o *novo preço*.\n\n" +
+	            "Exemplos:\n" +
+	            "- 10\n" +
+	            "- 10,50\n" +
+	            "- R$ 10,50";
+
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_prod_preco_digitacao",
+	        sup.msg().botoes(
+	            whatsappAdmin,
+	            sup.msg().trunc(corpo, 1024),
+	            List.of(
+	                sup.btn(
+	                    montarComandoVoltarProduto(
+	                        idProduto,
+	                        idCategoria,
+	                        safeOffset
+	                    ),
+	                    "⬅️ Cancelar"
+	                )
+	            )
+	        )
+	    );
+	}
+
+    public AdministradorWhatsappResultados.ResultadoAdmin concluirPrecoManualProdutoPorDigitacao(
 	    Estabelecimento estabelecimento,
 	    String whatsappAdmin,
 	    Long idSessao,
@@ -548,8 +611,6 @@ public class AdminProdutoService {
 	    Long idCategoria = sessaoAdminProdutoService.getIdCategoriaNovoPreco(idSessao);
 	    int safeOffset = sessaoAdminProdutoService.getOffsetListaNovoPreco(idSessao);
 
-	    Produto produto = buscarProdutoValidado(estabelecimento, idProduto, idCategoria);
-
 	    BigDecimal novoPreco = parsePrecoDigitado(textoDigitado);
 	    if (novoPreco.compareTo(BigDecimal.ZERO) < 0) {
 	        novoPreco = BigDecimal.ZERO;
@@ -567,26 +628,18 @@ public class AdminProdutoService {
 	        sessaoAdminProdutoService.limparCadastroGuiadoProduto(idSessao);
 	    }
 
-	    // Após definir o preço, volta para a lista para facilitar a conferência do cadastro concluído.
-	    AdministradorWhatsappResultados.ResultadoAdmin lista =
-	        adminCategoriaService.montarListaProdutosPorCategoria(
-	            estabelecimento,
-	            whatsappAdmin,
-	            idCategoria,
-	            safeOffset
-	        );
+	    // Após definir o preço, volta para a lista de ações do prórpio produto.
+	    String mensagemCabecalho =
+    	    "✅ Preço atualizado com sucesso!\n\n";
 
-	    String descricao = sup.msg().safe(produto.getDescricao());
-	    if (!StringUtils.hasText(descricao)) {
-	        descricao = "Sem descrição.";
-	    }
-
-	    return new AdministradorWhatsappResultados.ResultadoAdminPreco(
-	        lista,
-	        novoPreco,
-	        sup.msg().trunc(sup.msg().safe(produto.getNome()), 80),
-	        descricao
-	    );
+	    return montarMenuAcoesProduto(
+    	    estabelecimento,
+    	    whatsappAdmin,
+    	    idProduto,
+    	    idCategoria,
+    	    safeOffset,
+    	    mensagemCabecalho
+    	);
 	}
 
     public AdministradorWhatsappResultados.ResultadoAdmin iniciarAlteracaoNomeProdutoPorDigitacao(
@@ -642,18 +695,18 @@ public class AdminProdutoService {
         produtoService.atualizarNome(idProduto, nomeLimpo);
         sessaoAdminProdutoService.limparAguardandoNovoNomeProduto(idSessao);
 
-        String corpo =
-            "✅ Nome atualizado.\n\n" +
-                "Produto: *" + sup.msg().trunc(sup.msg().safe(nomeLimpo), 80) + "*";
+        String mensagemCabecalho =
+    	    "✅ Nome atualizado com sucesso!\n\n" +
+    	        "Produto: *" + sup.msg().trunc(sup.msg().safe(nomeLimpo), 80) + "*";
 
-        return montarRetornoProdutoLista(
-            whatsappAdmin,
-            "admin_prod_nome_ok",
-            corpo,
-            idProduto,
-            idCategoria,
-            safeOffset
-        );
+    	return montarMenuAcoesProduto(
+    	    estabelecimento,
+    	    whatsappAdmin,
+    	    idProduto,
+    	    idCategoria,
+    	    safeOffset,
+    	    mensagemCabecalho
+    	);
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin iniciarAlteracaoDescricaoProdutoPorDigitacao(
@@ -671,15 +724,30 @@ public class AdminProdutoService {
 
         sessaoAdminProdutoService.marcarAguardandoNovaDescricaoProduto(idSessao, idProduto, idCategoria, safeOffset);
 
-        String corpo =
-            "📝 *Ajustar descrição*\n\n" +
-                "Produto: *" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*\n\n" +
-                "Agora envie apenas a *nova descrição*.";
+        String descricaoAtual = StringUtils.hasText(produto.getDescricao())
+    	    ? sup.msg().safe(produto.getDescricao())
+    	    : "Sem descrição.";
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_prod_desc_digitacao",
-            sup.msg().texto(whatsappAdmin, sup.msg().trunc(corpo, 1024))
-        );
+    	String corpo =
+    	    "📝 *Ajustar descrição*\n\n" +
+    	        "Produto: *" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*\n\n" +
+    	        "*Descrição atual:*\n" +
+    	        sup.msg().trunc(descricaoAtual, 400) + "\n\n" +
+    	        "Agora envie apenas a *nova descrição*.";
+
+    	return new AdministradorWhatsappResultados.ResultadoAdmin(
+		    "admin_prod_desc_digitacao",
+		    sup.msg().botoes(
+		        whatsappAdmin,
+		        sup.msg().trunc(corpo, 1024),
+		        List.of(
+		            sup.btn(
+		                montarComandoVoltarProduto(idProduto, idCategoria, safeOffset),
+		                "⬅️ Cancelar"
+		            )
+		        )
+		    )
+		);
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin concluirAlteracaoDescricaoProdutoPorDigitacao(
@@ -703,29 +771,23 @@ public class AdminProdutoService {
 	    Long idCategoria = sessaoAdminProdutoService.getIdCategoriaNovaDescricao(idSessao);
 	    int safeOffset = sessaoAdminProdutoService.getOffsetListaNovaDescricao(idSessao);
 
-	    Produto produto = buscarProdutoValidado(estabelecimento, idProduto, idCategoria);
 	    String descricaoAtualizada = novaDesc.trim();
 
 	    produtoService.atualizarDescricao(idProduto, descricaoAtualizada);
 	    sessaoAdminProdutoService.limparAguardandoNovaDescricaoProduto(idSessao);
 
 	    boolean cadastroGuiado = sessaoAdminProdutoService.isCadastroGuiadoProduto(idSessao);
-	    boolean categoriaUsaGrade = gradeTamanhoService.categoriaPossuiGradeAtiva(idCategoria);
+	    Produto produto = buscarProdutoValidado(estabelecimento, idProduto, idCategoria);
+	    var gradeAplicavel = gradeTamanhoService.buscarGradeAplicavelAoProduto(produto);
 
-	    if (cadastroGuiado && categoriaUsaGrade) {
-	        var grade = gradeTamanhoService.buscarGradeDaCategoria(idCategoria);
-
-	        if (grade == null) {
-	            throw new ResponseStatusException(HttpStatus.CONFLICT, "Categoria sem grade ativa");
-	        }
-
-	        var primeiraOpcao = gradeTamanhoService.listarOpcoes(grade.getIdGrade(), true)
+	    if (cadastroGuiado && gradeAplicavel != null) {
+	        var primeiraOpcao = gradeTamanhoService.listarOpcoes(gradeAplicavel.getId(), true)
 	            .stream()
 	            .filter(Objects::nonNull)
 	            .findFirst()
 	            .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "Nenhum tamanho ativo encontrado"));
 
-	        return adminTamanhoService.iniciarAlteracaoPrecoTamanhoProduto(
+	        return adminTamanhoProdutoService.iniciarAlteracaoPrecoTamanhoProduto(
 	            estabelecimento,
 	            whatsappAdmin,
 	            idSessao,
@@ -747,19 +809,17 @@ public class AdminProdutoService {
 	        );
 	    }
 
-	    String corpo =
-	        "✅ Descrição atualizada.\n\n" +
-	            "*" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*\n" +
-	            sup.msg().trunc(sup.msg().safe(descricaoAtualizada), 500);
+	    String mensagemCabecalho =
+    	    "✅ Descrição atualizada com sucesso!\n\n";
 
-	    return montarRetornoProdutoLista(
-	        whatsappAdmin,
-	        "admin_prod_desc_ok",
-	        corpo,
-	        idProduto,
-	        idCategoria,
-	        safeOffset
-	    );
+    	return montarMenuAcoesProduto(
+    	    estabelecimento,
+    	    whatsappAdmin,
+    	    idProduto,
+    	    idCategoria,
+    	    safeOffset,
+    	    mensagemCabecalho
+    	);
 	}
 
     public AdministradorWhatsappResultados.ResultadoAdmin iniciarAlteracaoFotoProdutoPorEnvioImagem(
@@ -930,64 +990,95 @@ public class AdminProdutoService {
     }
 
     public AdministradorWhatsappResultados.ResultadoAdmin confirmarExclusaoProduto(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idProduto,
-        Long idCategoria,
-        Integer offsetLista
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idProduto,
+	    Long idCategoria,
+	    Integer offsetLista
+	) {
 
-        int safeOffset = normalizarOffset(offsetLista);
-        Produto produto = buscarProdutoValidado(estabelecimento, idProduto, idCategoria);
+	    int safeOffset = normalizarOffset(offsetLista);
 
-        String corpo =
-            "⚠️ *Excluir produto*\n\n" +
-                "*" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*\n" +
-                "Preço: " + sup.msg().formatarMoeda(produto.getPreco()) + "\n\n" +
-                "Tem certeza que deseja excluir?";
+	    Produto produto = buscarProdutoValidado(
+	        estabelecimento,
+	        idProduto,
+	        idCategoria
+	    );
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_prod_excluir_confirm",
-            sup.msg().botoes(
-                whatsappAdmin,
-                sup.msg().trunc(corpo, 1024),
-                List.of(
-                    sup.btn("COMANDO|ADMIN_PROD_EXCLUIR|" + idProduto + "|" + idCategoria + "|" + safeOffset, "🗑️ Excluir"),
-                    sup.btn(montarComandoVoltarProduto(idProduto, idCategoria, safeOffset), "⬅️ Cancelar")
-                )
-            )
-        );
-    }
+	    String descricao = StringUtils.hasText(produto.getDescricao())
+	        ? sup.msg().safe(produto.getDescricao())
+	        : "Sem descrição.";
+
+	    String corpo =
+	        "⚠️ *Excluir produto*\n\n" +
+	            "*" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*\n" +
+	            sup.msg().trunc(descricao, 300) + "\n\n" +
+	            "Preço: " + sup.msg().formatarMoeda(produto.getPreco()) + "\n\n" +
+	            "Tem certeza que deseja excluir?";
+
+	    return new AdministradorWhatsappResultados.ResultadoAdmin(
+	        "admin_prod_excluir_confirm",
+	        sup.msg().botoes(
+	            whatsappAdmin,
+	            sup.msg().trunc(corpo, 1024),
+	            List.of(
+	                sup.btn(
+	                    "COMANDO|ADMIN_PROD_EXCLUIR|" +
+	                        idProduto + "|" +
+	                        idCategoria + "|" +
+	                        safeOffset,
+	                    "🗑️ Excluir"
+	                ),
+	                sup.btn(
+	                    montarComandoVoltarProduto(
+	                        idProduto,
+	                        idCategoria,
+	                        safeOffset
+	                    ),
+	                    "⬅️ Cancelar"
+	                )
+	            )
+	        )
+	    );
+	}
 
     public AdministradorWhatsappResultados.ResultadoAdmin excluirProduto(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        Long idProduto,
-        Long idCategoria,
-        Integer offsetLista
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idProduto,
+	    Long idCategoria,
+	    Integer offsetLista
+	) {
 
-        int safeOffset = normalizarOffset(offsetLista);
-        Produto produto = buscarProdutoValidado(estabelecimento, idProduto, idCategoria);
+	    int safeOffset = normalizarOffset(offsetLista);
 
-        produtoService.excluir(idProduto);
+	    Produto produto = buscarProdutoValidado(
+	        estabelecimento,
+	        idProduto,
+	        idCategoria
+	    );
 
-        String corpo =
-            "🗑️ Produto excluído.\n\n" +
-                "*" + sup.msg().trunc(sup.msg().safe(produto.getNome()), 80) + "*";
+	    String nomeProduto = sup.msg().trunc(
+	        sup.msg().safe(produto.getNome()),
+	        80
+	    );
 
-        return new AdministradorWhatsappResultados.ResultadoAdmin(
-            "admin_prod_excluir_ok",
-            sup.msg().botoes(
-                whatsappAdmin,
-                sup.msg().trunc(corpo, 1024),
-                List.of(
-                    sup.btn(montarComandoVoltarListaProdutos(idCategoria, safeOffset), "🧾 Voltar à lista"),
-                    sup.btn("COMANDO|ADMIN_MENU", "🛠️ Menu admin")
-                )
-            )
-        );
-    }
+	    produtoService.excluir(idProduto);
+
+	    // Após excluir, retorna diretamente para a lista da categoria
+	    // exibindo a confirmação no cabeçalho da própria listagem.
+	    String mensagemCabecalho =
+	        "🗑️ Produto excluído com sucesso!\n\n" +
+	            "Produto: *" + nomeProduto + "*";
+
+	    return adminCategoriaService.montarListaProdutosPorCategoria(
+	        estabelecimento,
+	        whatsappAdmin,
+	        idCategoria,
+	        safeOffset,
+	        mensagemCabecalho
+	    );
+	}
 
     private Produto buscarProdutoValidado(Estabelecimento estabelecimento, Long idProduto, Long idCategoria) {
 

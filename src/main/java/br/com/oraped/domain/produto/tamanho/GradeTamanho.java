@@ -2,6 +2,8 @@ package br.com.oraped.domain.produto.tamanho;
 
 import br.com.oraped.domain.BaseEntity;
 import br.com.oraped.domain.Estabelecimento;
+import br.com.oraped.domain.produto.CategoriaProduto;
+import br.com.oraped.domain.produto.Produto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
@@ -11,16 +13,15 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * Representa uma grade reutilizável de tamanhos de produto.
+ * Representa uma grade de tamanhos vinculada a uma categoria ou produto.
  *
  * Aplicação:
- * - usada para organizar tamanhos como "Pequena", "Média", "Grande" e "Família"
- * - pertence ao estabelecimento para permitir reaproveitamento em várias categorias do mesmo cardápio
- * - será associada às categorias por GradeTamanhoCategoriaProduto
+ * - quando vinculada à categoria, serve como grade padrão para os produtos da categoria
+ * - quando vinculada ao produto, serve apenas para aquele produto específico
  *
  * Regra:
- * - a categoria pode possuir no máximo uma grade de tamanhos ativa/configurada
- * - os preços específicos ficam nos itens da grade, ou seja, em OpcaoTamanhoProduto
+ * - uma grade deve estar associada a uma categoria OU a um produto, nunca aos dois
+ * - os preços específicos ficam em OpcaoTamanhoProduto
  */
 @Getter
 @Setter
@@ -32,21 +33,25 @@ public class GradeTamanho extends BaseEntity {
     @JoinColumn(name = "estabelecimento_id", nullable = false)
     private Estabelecimento estabelecimento;
 
+    @ManyToOne
+    @JoinColumn(name = "id_categoria_produto")
+    private CategoriaProduto categoria;
+
+    @ManyToOne
+    @JoinColumn(name = "id_produto")
+    private Produto produto;
+
     @Column(nullable = false, length = 120)
     private String nome;
 
     @Column(columnDefinition = "TEXT")
     private String descricao;
 
-    /**
-     * Grade inativa não deve ser oferecida para novas associações ou seleção no pedido.
-     */
+    // Grade inativa não deve ser oferecida para novas configurações ou seleção no pedido.
     @Column(nullable = false)
     private boolean ativo = true;
 
-    /**
-     * Exclusão lógica preserva histórico/configurações antigas sem remover fisicamente o cadastro.
-     */
+    // Exclusão lógica preserva histórico/configurações antigas sem remover fisicamente o cadastro.
     @Column(nullable = false)
     private boolean excluido = false;
 }

@@ -32,257 +32,202 @@ public class RoteamentoAdminComplementoProdutoService {
     private final OrquestradorParseService parse;
 
     public RoteamentoResultado rotear(
-        Estabelecimento estabelecimento,
-        String whatsappAdmin,
-        ComandoWhatsapp cmd
-    ) {
+	    Estabelecimento estabelecimento,
+	    String whatsappAdmin,
+	    Long idSessao,
+	    ComandoWhatsapp cmd
+	){
 
-        String acao = cmd == null ? null : cmd.getAcao();
+	    String acao = cmd == null ? null : cmd.getAcao();
 
-        switch (acao) {
+	    switch (acao) {
 
-            case "ADMIN_PROD_COMPLEMENTOS_MENU": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+		    case "ADMIN_PROD_COMPLEMENTOS_MENU": {
+		        Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+		        Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+		        Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+		        Integer offsetComplementos = parse.parseIntDefaultZero(cmd.getParte(5));
+	
+		        AdministradorWhatsappResultados.ResultadoAdmin r =
+		            adminComplementoProdutoService.montarMenuComplementosProduto(
+		                estabelecimento,
+		                whatsappAdmin,
+		                idProduto,
+		                idCategoria,
+		                offsetListaProduto,
+		                offsetComplementos
+		            );
+	
+		        return new RoteamentoResultado(r.chave, r.mensagem);
+		    }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.montarMenuComplementosProduto(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto
-                    );
+	        case "ADMIN_PROD_COMP_GRUPOS": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Integer offsetGrupos = parse.parseIntDefaultZero(cmd.getParte(5));
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.listarGruposProduto(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    offsetGrupos
+	                );
 
-            case "ADMIN_PROD_COMP_ASSOCIADOS": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Integer offsetGrupos = parse.parseIntDefaultZero(cmd.getParte(5));
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.listarGruposAssociadosAoProduto(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        offsetGrupos
-                    );
+	        case "ADMIN_PROD_COMP_GRUPO_NOVO": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.iniciarCadastroGuiadoComplementoProduto(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idSessao,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto
+	                );
 
-            case "ADMIN_PROD_COMP_ASSOCIAR_MENU": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Integer offsetGrupos = parse.parseIntDefaultZero(cmd.getParte(5));
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.listarGruposDisponiveisParaAssociar(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        offsetGrupos
-                    );
+	        case "ADMIN_PROD_COMP_GRUPO_DETALHE": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.montarDetalheGrupoProduto(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    idGrupo
+	                );
 
-            case "ADMIN_PROD_COMP_ASSOCIAR": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.associarGrupoAoProduto(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo
-                    );
+	        case "ADMIN_PROD_COMP_COMPLEMENTOS": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            Integer offsetComplementos = parse.parseIntDefaultZero(cmd.getParte(6));
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.listarComplementosDoGrupo(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    idGrupo,
+	                    offsetComplementos
+	                );
 
-            case "ADMIN_PROD_COMP_GRUPO_DETALHE": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.montarDetalheGrupoAssociado(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo
-                    );
+	        case "ADMIN_PROD_COMP_COMPLEMENTO_DETALHE": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.montarDetalheComplemento(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    idGrupo,
+	                    idComplemento
+	                );
 
-            case "ADMIN_PROD_COMP_GRUPO_DESASSOCIAR_CONFIRM": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.confirmarDesassociacaoGrupoProduto(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo
-                    );
+	        case "ADMIN_PROD_COMP_COMPLEMENTO_STATUS": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
+	            boolean ativo = parse.parseIntDefaultZero(cmd.getParte(7)) == 1;
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.alterarStatusComplemento(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    idGrupo,
+	                    idComplemento,
+	                    ativo
+	                );
 
-            case "ADMIN_PROD_COMP_GRUPO_DESASSOCIAR": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.desassociarGrupoProduto(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo
-                    );
+	        case "ADMIN_PROD_COMP_COMPLEMENTO_PRECO_MENU": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.montarMenuPrecoComplemento(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    idGrupo,
+	                    idComplemento
+	                );
 
-            case "ADMIN_PROD_COMP_COMPLEMENTOS": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
-                Integer offsetComplementos = parse.parseIntDefaultZero(cmd.getParte(6));
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.listarComplementosDoGrupo(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo,
-                        offsetComplementos
-                    );
+	        case "ADMIN_PROD_COMP_COMPLEMENTO_PRECO_APLICAR": {
+	            Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
+	            Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
+	            Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
+	            Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
+	            Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
+	            Integer deltaCentavos = parse.parseIntDefaultZeroAllowNegative(cmd.getParte(7));
 
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.aplicarDeltaPrecoComplemento(
+	                    estabelecimento,
+	                    whatsappAdmin,
+	                    idProduto,
+	                    idCategoria,
+	                    offsetListaProduto,
+	                    idGrupo,
+	                    idComplemento,
+	                    deltaCentavos
+	                );
 
-            case "ADMIN_PROD_COMP_COMPLEMENTO_DETALHE": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
-                Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
 
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.montarDetalheComplemento(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo,
-                        idComplemento
-                    );
-
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
-
-            case "ADMIN_PROD_COMP_COMPLEMENTO_STATUS": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
-                Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
-                boolean ativo = parse.parseIntDefaultZero(cmd.getParte(7)) == 1;
-
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.alterarStatusComplemento(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo,
-                        idComplemento,
-                        ativo
-                    );
-
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
-
-            case "ADMIN_PROD_COMP_COMPLEMENTO_PRECO_MENU": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
-                Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
-
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.montarMenuPrecoComplemento(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo,
-                        idComplemento
-                    );
-
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
-
-            case "ADMIN_PROD_COMP_COMPLEMENTO_PRECO_APLICAR": {
-                Long idProduto = parse.parseLongObrigatorio(cmd.getParte(2), "idProduto");
-                Long idCategoria = parse.parseLongObrigatorio(cmd.getParte(3), "idCategoria");
-                Integer offsetListaProduto = parse.parseIntDefaultZero(cmd.getParte(4));
-                Long idGrupo = parse.parseLongObrigatorio(cmd.getParte(5), "idGrupo");
-                Long idComplemento = parse.parseLongObrigatorio(cmd.getParte(6), "idComplemento");
-                Integer deltaCentavos = parse.parseIntDefaultZeroAllowNegative(cmd.getParte(7));
-
-                AdministradorWhatsappResultados.ResultadoAdmin r =
-                    adminComplementoProdutoService.aplicarDeltaPrecoComplemento(
-                        estabelecimento,
-                        whatsappAdmin,
-                        idProduto,
-                        idCategoria,
-                        offsetListaProduto,
-                        idGrupo,
-                        idComplemento,
-                        deltaCentavos
-                    );
-
-                return new RoteamentoResultado(r.chave, r.mensagem);
-            }
-
-            default:
-                return null;
-        }
-    }
+	        default:
+	            return null;
+	    }
+	}
 }

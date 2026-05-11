@@ -1,16 +1,13 @@
 package br.com.oraped.domain.produto;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 import br.com.oraped.domain.BaseEntity;
 import br.com.oraped.domain.Estabelecimento;
-import br.com.oraped.domain.produto.complemento.GrupoComplementoProduto;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
@@ -43,12 +40,12 @@ public class Produto extends BaseEntity {
      * Preço padrão do produto.
      *
      * Regra:
-     * - usado somente quando a categoria do produto não possui grade de tamanhos
-     * - quando a categoria possui grade de tamanhos, o preço final vem de OpcaoTamanhoProduto.preco
+     * - usado somente quando não há grade de tamanhos aplicável ao produto
+     * - quando há grade aplicável, o preço final vem de OpcaoTamanhoProduto.preco
      */
     @Column(precision = 12, scale = 2)
     private BigDecimal preco;
-
+    
     /**
      * URL pública da foto principal do produto.
      * Usada para exibição visual no cardápio e no carrossel do WhatsApp.
@@ -70,13 +67,18 @@ public class Produto extends BaseEntity {
     
     
     /**
-     * Grupos de complementos associados ao produto.
+     * Exclusão lógica do produto.
      *
      * Regra:
-     * - produto sem grupos segue o fluxo atual de pedido
-     * - produto com grupos entrará no fluxo guiado de seleção de complementos
-     * - a ordem real de exibição fica em ProdutoGrupoComplemento.ordem
+     * - excluido=false => produto ativo no cadastro
+     * - excluido=true  => produto removido logicamente, preservando histórico e integridade
      */
-    @OneToMany(mappedBy = "produto")
-    private List<GrupoComplementoProduto> gruposComplemento;
+    @Column(nullable = false)
+    private boolean excluido = false;
+
+    /**
+     * Data/hora em que o produto foi removido logicamente.
+     */
+    @Column(name = "data_exclusao")
+    private java.time.OffsetDateTime dataExclusao;
 }

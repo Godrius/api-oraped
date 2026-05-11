@@ -15,48 +15,42 @@ import br.com.oraped.domain.produto.CategoriaProduto;
 import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.domain.produto.complemento.Complemento;
 import br.com.oraped.domain.produto.complemento.GrupoComplemento;
-import br.com.oraped.domain.produto.complemento.GrupoComplementoCategoriaProduto;
-import br.com.oraped.domain.produto.complemento.GrupoComplementoProduto;
 import br.com.oraped.dto.produto.complemento.ComplementoRequestDTO;
 import br.com.oraped.dto.produto.complemento.ComplementoResponseDTO;
-import br.com.oraped.dto.produto.complemento.GrupoComplementoCategoriaProdutoResponseDTO;
-import br.com.oraped.dto.produto.complemento.GrupoComplementoProdutoRequestDTO;
-import br.com.oraped.dto.produto.complemento.GrupoComplementoProdutoResponseDTO;
 import br.com.oraped.dto.produto.complemento.GrupoComplementoRequestDTO;
 import br.com.oraped.dto.produto.complemento.GrupoComplementoResponseDTO;
 import br.com.oraped.repository.produto.CategoriaProdutoRepository;
 import br.com.oraped.repository.produto.complemento.ComplementoRepository;
-import br.com.oraped.repository.produto.complemento.GrupoComplementoCategoriaProdutoRepository;
-import br.com.oraped.repository.produto.complemento.GrupoComplementoProdutoRepository;
 import br.com.oraped.repository.produto.complemento.GrupoComplementoRepository;
 import br.com.oraped.service.EstabelecimentoService;
 import br.com.oraped.service.produto.ProdutoService;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Serviço administrativo para grupos de complementos, complementos e associações com categorias/produtos.
+ * Serviço administrativo para grupos de complementos e suas opções.
  *
  * Aplicação:
- * - mantém grupos reutilizáveis por estabelecimento
+ * - mantém grupos de complementos vinculados a uma categoria ou produto
  * - permite cadastrar opções dentro de cada grupo
- * - associa grupos às categorias para herança automática pelos produtos
- * - associa grupos diretamente aos produtos para exceções específicas
- * - aplica exclusão lógica nos grupos para preservar histórico de pedidos e associações
+ * - aplica exclusão lógica nos grupos para preservar histórico de pedidos
+ *
+ * Regra:
+ * - um grupo deve estar associado a uma categoria OU a um produto, nunca aos dois
+ * - grupos de produto têm prioridade sobre grupos da categoria no fluxo de pedido
+ * - complementos pertencem ao grupo e não são compartilhados entre grupos
  */
 @Service
 @RequiredArgsConstructor
 public class GrupoComplementoService {
 	
-    private final CategoriaProdutoRepository categoriaProdutoRepository;
     private final GrupoComplementoRepository grupoComplementoRepository;
+    private final CategoriaProdutoRepository categoriaProdutoRepository;    
     private final ComplementoRepository complementoRepository;
-    private final GrupoComplementoProdutoRepository grupoComplementoProdutoRepository;
-    private final GrupoComplementoCategoriaProdutoRepository grupoComplementoCategoriaProdutoRepository;
     
-    
-    private final ProdutoService produtoService;
     private final EstabelecimentoService estabelecimentoService;
-
+    private final ProdutoService produtoService;
+    
+    
     @Transactional(readOnly = true)
     public GrupoComplemento buscarObrigatorio(Long idGrupo) {
 
@@ -124,22 +118,121 @@ public class GrupoComplementoService {
             }
 
             Estabelecimento estabelecimento = estabelecimentoService.buscar(dto.getIdEstabelecimento());
+
             grupo.setEstabelecimento(estabelecimento);
             grupo.setExcluido(false);
-        } else if (grupo.isExcluido()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Grupo de complementos excluído não pode ser alterado");
+
+            // O escopo nasce junto com o grupo para impedir reaproveitamento indevido.
+            aplicarEscopoGrupo(grupo, dto);
+        } else {
+            if (grupo.isExcluido()) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Grupo de complementos excluído não pode ser alterado");
+            }
+
+            // Alteração de grupo existente preserva o escopo original.
+            validarEscopoGrupo(grupo);
         }
 
         grupo.setNome(nome);
         grupo.setDescricao(normalizarTextoOpcional(dto.getDescricao(), 2000));
         grupo.setMinimoSelecoes(minimo);
         grupo.setMaximoSelecoes(maximo);
+        grupo.setOrdem(normalizarQuantidade(dto.getOrdem(), 1));
 
         if (dto.getAtivo() != null) {
             grupo.setAtivo(Boolean.TRUE.equals(dto.getAtivo()));
         }
 
         return new GrupoComplementoResponseDTO(grupoComplementoRepository.save(grupo));
+    }
+    
+    private void aplicarEscopoGrupo(GrupoComplemento grupo, GrupoComplementoRequestDTO dto) {
+
+        boolean possuiCategoria = dto.getIdCategoria() != null;
+        boolean possuiProduto = dto.getIdProduto() != null;
+
+        if (possuiCategoria == possuiProduto) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "O grupo deve estar associado a uma categoria ou a um produto"
+            );
+        }
+
+        if (possuiCategoria) {
+            CategoriaProduto categoria = buscarCategoriaObrigatoria(dto.getIdCategoria());
+            validarCategoriaDoEstabelecimento(categoria, grupo.getEstabelecimento());
+
+            grupo.setCategoria(categoria);
+            grupo.setProduto(null);
+            return;
+        }
+
+        Produto produto = produtoService.buscarObrigatorio(dto.getIdProduto());
+        validarProdutoDoEstabelecimento(produto, grupo.getEstabelecimento());
+
+        grupo.setProduto(produto);
+        grupo.setCategoria(null);
+    }
+
+    private CategoriaProduto buscarCategoriaObrigatoria(Long idCategoria) {
+
+        if (idCategoria == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idCategoria é obrigatório");
+        }
+
+        return categoriaProdutoRepository.findById(idCategoria)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Categoria não encontrada"));
+    }
+    
+    private void validarEscopoGrupo(GrupoComplemento grupo) {
+
+        boolean possuiCategoria = grupo.getCategoria() != null;
+        boolean possuiProduto = grupo.getProduto() != null;
+
+        if (possuiCategoria == possuiProduto) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT,
+                "Grupo de complementos com escopo inválido"
+            );
+        }
+    }
+
+    private void validarCategoriaDoEstabelecimento(
+        CategoriaProduto categoria,
+        Estabelecimento estabelecimento
+    ) {
+
+        Long idEstabelecimentoCategoria = categoria.getEstabelecimento() == null
+            ? null
+            : categoria.getEstabelecimento().getId();
+
+        Long idEstabelecimento = estabelecimento == null ? null : estabelecimento.getId();
+
+        if (!Objects.equals(idEstabelecimentoCategoria, idEstabelecimento)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Categoria não pertence ao estabelecimento"
+            );
+        }
+    }
+
+    private void validarProdutoDoEstabelecimento(
+        Produto produto,
+        Estabelecimento estabelecimento
+    ) {
+
+        Long idEstabelecimentoProduto = produto.getEstabelecimento() == null
+            ? null
+            : produto.getEstabelecimento().getId();
+
+        Long idEstabelecimento = estabelecimento == null ? null : estabelecimento.getId();
+
+        if (!Objects.equals(idEstabelecimentoProduto, idEstabelecimento)) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Produto não pertence ao estabelecimento"
+            );
+        }
     }
 
     @Transactional
@@ -264,77 +357,10 @@ public class GrupoComplementoService {
 
         return new ComplementoResponseDTO(complementoRepository.save(complemento));
     }
-
-    @Transactional(readOnly = true)
-    public List<GrupoComplementoProdutoResponseDTO> listarGruposDoProduto(Long idProduto, Boolean somenteAtivos) {
-
-        Produto produto = produtoService.buscarObrigatorio(idProduto);
-
-        boolean ativos = somenteAtivos == null || Boolean.TRUE.equals(somenteAtivos);
-
-        List<GrupoComplementoProduto> associacoes = ativos
-            ? grupoComplementoProdutoRepository.findByProdutoIdAndAtivoTrueOrderByOrdemAsc(produto.getId())
-            : grupoComplementoProdutoRepository.findByProdutoIdOrderByOrdemAsc(produto.getId());
-
-        return associacoes.stream()
-            .filter(associacao -> associacao.getGrupo() == null || !associacao.getGrupo().isExcluido())
-            .map(GrupoComplementoProdutoResponseDTO::new)
-            .toList();
-    }
-
-    @Transactional
-    public GrupoComplementoProdutoResponseDTO associarGrupoAoProduto(GrupoComplementoProdutoRequestDTO dto) {
-
-        if (dto == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Dados da associação são obrigatórios");
-        }
-
-        Produto produto = produtoService.buscarObrigatorio(dto.getIdProduto());
-        GrupoComplemento grupo = buscarObrigatorio(dto.getIdGrupo());
-
-        if (grupo.isExcluido()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Grupo de complementos excluído não pode ser associado ao produto");
-        }
-
-        validarMesmoEstabelecimento(produto, grupo);
-
-        GrupoComplementoProduto associacao = grupoComplementoProdutoRepository
-            .findByProdutoIdAndGrupoId(produto.getId(), grupo.getId())
-            .orElseGet(GrupoComplementoProduto::new);
-
-        associacao.setProduto(produto);
-        associacao.setGrupo(grupo);
-        associacao.setOrdem(normalizarQuantidade(dto.getOrdem(), 1));
-
-        if (dto.getAtivo() != null) {
-            associacao.setAtivo(Boolean.TRUE.equals(dto.getAtivo()));
-        } else {
-            associacao.setAtivo(true);
-        }
-
-        return new GrupoComplementoProdutoResponseDTO(grupoComplementoProdutoRepository.save(associacao));
-    }
-
-    @Transactional
-    public void desassociarGrupoDoProduto(Long idProduto, Long idGrupo) {
-
-        Produto produto = produtoService.buscarObrigatorio(idProduto);
-        GrupoComplemento grupo = buscarObrigatorio(idGrupo);
-
-        validarMesmoEstabelecimento(produto, grupo);
-
-        GrupoComplementoProduto associacao = grupoComplementoProdutoRepository
-            .findByProdutoIdAndGrupoId(produto.getId(), grupo.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo não está associado ao produto"));
-
-        // A associação fica inativa para preservar rastreabilidade e evitar perda acidental de configuração.
-        associacao.setAtivo(false);
-        grupoComplementoProdutoRepository.save(associacao);
-    }
-
+    
     
     @Transactional(readOnly = true)
-    public List<GrupoComplementoCategoriaProdutoResponseDTO> listarGruposDaCategoriaProduto(
+    public List<GrupoComplementoResponseDTO> listarGruposDaCategoria(
         Long idCategoria,
         Boolean somenteAtivos
     ) {
@@ -343,120 +369,54 @@ public class GrupoComplementoService {
 
         boolean ativos = somenteAtivos == null || Boolean.TRUE.equals(somenteAtivos);
 
-        List<GrupoComplementoCategoriaProduto> associacoes = ativos
-            ? grupoComplementoCategoriaProdutoRepository.findByCategoriaIdAndAtivoTrueOrderByOrdemAsc(categoria.getId())
-            : grupoComplementoCategoriaProdutoRepository.findByCategoriaIdOrderByOrdemAsc(categoria.getId());
+        List<GrupoComplemento> grupos = ativos
+            ? grupoComplementoRepository.findByCategoriaIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(categoria.getId())
+            : grupoComplementoRepository.findByCategoriaIdAndExcluidoFalseOrderByOrdemAscNomeAsc(categoria.getId());
 
-        return associacoes.stream()
-            .filter(a -> a.getGrupo() == null || !a.getGrupo().isExcluido())
-            .map(this::montarGrupoComplementoCategoriaProdutoResponse)
+        return grupos.stream()
+            .map(GrupoComplementoResponseDTO::new)
             .toList();
     }
 
-    @Transactional
-    public GrupoComplementoCategoriaProdutoResponseDTO associarGrupoACategoriaProduto(
-        Long idCategoria,
-        Long idGrupo,
-        Integer ordem
+    @Transactional(readOnly = true)
+    public List<GrupoComplementoResponseDTO> listarGruposDoProduto(
+        Long idProduto,
+        Boolean somenteAtivos
     ) {
 
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-        GrupoComplemento grupo = buscarObrigatorio(idGrupo);
+        Produto produto = produtoService.buscarObrigatorio(idProduto);
 
-        if (grupo.isExcluido()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Grupo de complementos excluído não pode ser associado à categoria");
-        }
+        boolean ativos = somenteAtivos == null || Boolean.TRUE.equals(somenteAtivos);
 
-        validarMesmoEstabelecimento(categoria, grupo);
+        List<GrupoComplemento> grupos = ativos
+            ? grupoComplementoRepository.findByProdutoIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getId())
+            : grupoComplementoRepository.findByProdutoIdAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getId());
 
-        GrupoComplementoCategoriaProduto associacao = grupoComplementoCategoriaProdutoRepository
-            .findByCategoriaIdAndGrupoId(categoria.getId(), grupo.getId())
-            .orElseGet(GrupoComplementoCategoriaProduto::new);
-
-        associacao.setCategoria(categoria);
-        associacao.setGrupo(grupo);
-        associacao.setOrdem(normalizarQuantidade(ordem, 1));
-        associacao.setAtivo(true);
-
-        return montarGrupoComplementoCategoriaProdutoResponse(
-    	    grupoComplementoCategoriaProdutoRepository.save(associacao)
-    	);
-    }
-    
-    
-    private GrupoComplementoCategoriaProdutoResponseDTO montarGrupoComplementoCategoriaProdutoResponse(
-	    GrupoComplementoCategoriaProduto associacao
-	) {
-
-	    Long idGrupo = associacao.getGrupo() == null ? null : associacao.getGrupo().getId();
-
-	    Integer quantidadeComplementos = idGrupo == null
-	        ? 0
-	        : Math.toIntExact(complementoRepository.countByGrupoId(idGrupo));
-
-	    return new GrupoComplementoCategoriaProdutoResponseDTO(
-	        associacao,
-	        quantidadeComplementos
-	    );
-	}
-
-    @Transactional
-    public void desassociarGrupoDaCategoriaProduto(Long idCategoria, Long idGrupo) {
-
-        CategoriaProduto categoria = buscarCategoriaObrigatoria(idCategoria);
-        GrupoComplemento grupo = buscarObrigatorio(idGrupo);
-
-        validarMesmoEstabelecimento(categoria, grupo);
-
-        GrupoComplementoCategoriaProduto associacao = grupoComplementoCategoriaProdutoRepository
-            .findByCategoriaIdAndGrupoId(categoria.getId(), grupo.getId())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Grupo não está associado à categoria"));
-
-        // Desassociação lógica para preservar configuração/histórico.
-        associacao.setAtivo(false);
-
-        grupoComplementoCategoriaProdutoRepository.save(associacao);
+        return grupos.stream()
+            .map(GrupoComplementoResponseDTO::new)
+            .toList();
     }
 
-    private CategoriaProduto buscarCategoriaObrigatoria(Long idCategoria) {
+    @Transactional(readOnly = true)
+    public List<GrupoComplemento> listarGruposAplicaveisAoProduto(Produto produto) {
 
-        if (idCategoria == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idCategoria é obrigatório");
+        if (produto == null || produto.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "produto é obrigatório");
         }
 
-        return categoriaProdutoRepository.findById(idCategoria)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Categoria não encontrada"));
-    }
+        List<GrupoComplemento> gruposProduto =
+            grupoComplementoRepository.findByProdutoIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getId());
 
-    private void validarMesmoEstabelecimento(CategoriaProduto categoria, GrupoComplemento grupo) {
-
-        Long idEstabelecimentoCategoria = categoria.getEstabelecimento() == null
-            ? null
-            : categoria.getEstabelecimento().getId();
-
-        Long idEstabelecimentoGrupo = grupo.getEstabelecimento() == null
-            ? null
-            : grupo.getEstabelecimento().getId();
-
-        if (!Objects.equals(idEstabelecimentoCategoria, idEstabelecimentoGrupo)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Grupo de complementos não pertence ao mesmo estabelecimento da categoria"
-            );
+        if (!gruposProduto.isEmpty()) {
+            return gruposProduto;
         }
-    }
-    
-    private void validarMesmoEstabelecimento(Produto produto, GrupoComplemento grupo) {
 
-        Long idEstabelecimentoProduto = produto.getEstabelecimento() == null ? null : produto.getEstabelecimento().getId();
-        Long idEstabelecimentoGrupo = grupo.getEstabelecimento() == null ? null : grupo.getEstabelecimento().getId();
-
-        if (!Objects.equals(idEstabelecimentoProduto, idEstabelecimentoGrupo)) {
-            throw new ResponseStatusException(
-                HttpStatus.BAD_REQUEST,
-                "Grupo de complementos não pertence ao mesmo estabelecimento do produto"
-            );
+        if (produto.getCategoria() == null || produto.getCategoria().getId() == null) {
+            return List.of();
         }
+
+        return grupoComplementoRepository
+            .findByCategoriaIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getCategoria().getId());
     }
 
     private String normalizarTextoObrigatorio(String valor, String campo, int limite) {

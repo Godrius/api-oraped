@@ -16,16 +16,15 @@ import br.com.oraped.domain.enums.FormaPagamentoPedido;
 import br.com.oraped.domain.produto.CategoriaProduto;
 import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.domain.produto.complemento.Complemento;
-import br.com.oraped.domain.produto.complemento.GrupoComplementoCategoriaProduto;
-import br.com.oraped.domain.produto.tamanho.GradeTamanhoCategoriaProduto;
+import br.com.oraped.domain.produto.complemento.GrupoComplemento;
+import br.com.oraped.domain.produto.tamanho.GradeTamanho;
 import br.com.oraped.domain.produto.tamanho.OpcaoTamanhoProduto;
 import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaBotaoReplyWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemInterativaItemListaWhatsappDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.repository.produto.complemento.ComplementoRepository;
-import br.com.oraped.repository.produto.complemento.GrupoComplementoCategoriaProdutoRepository;
-import br.com.oraped.repository.produto.tamanho.GradeTamanhoCategoriaProdutoRepository;
+import br.com.oraped.repository.produto.complemento.GrupoComplementoRepository;
 import br.com.oraped.repository.produto.tamanho.OpcaoTamanhoProdutoRepository;
 import br.com.oraped.service.produto.tamanho.GradeTamanhoService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
@@ -52,11 +51,10 @@ public class MenuClienteService {
     private final SessaoAtendimentoWhatsappService sessaoService;
     private final GradeTamanhoService gradeTamanhoService;
     
-    private final GrupoComplementoCategoriaProdutoRepository grupoComplementoCategoriaProdutoRepository;
+    private final GrupoComplementoRepository grupoComplementoRepository;
     private final ComplementoRepository complementoRepository;
     private final SessaoItemCarrinhoEmMontagemService itemEmMontagemService;
     
-    private final GradeTamanhoCategoriaProdutoRepository gradeTamanhoCategoriaProdutoRepository;
     private final OpcaoTamanhoProdutoRepository opcaoTamanhoProdutoRepository;
     
     public MensagemWhatsappSaidaDTO montarMenuPrincipal(
@@ -190,9 +188,11 @@ public class MenuClienteService {
 	    int paginaAtual = (safeOffset / pageSizeCategorias) + 1;
 	    int paginasTotal = (int) Math.ceil(total / (double) pageSizeCategorias);
 
-	    String cabecalho =
-	        "Escolha uma categoria:\n" +
-	            "Página " + paginaAtual + " de " + paginasTotal;
+	    String cabecalho = "Escolha uma categoria:";
+
+	    if (paginasTotal > 1) {
+	        cabecalho += "\nPágina " + paginaAtual + " de " + paginasTotal;
+	    }
 
 	    List<MensagemInterativaItemListaWhatsappDTO> itens = page.stream()
 	        .map(c -> {
@@ -245,10 +245,28 @@ public class MenuClienteService {
 	    int safeOffset = (offset == null || offset < 0) ? 0 : offset;
 	    int pageSizeProdutos = 9;
 
+	    //lista de produtos da categoria selecionada
+	    boolean categoriaUsaTamanhos = gradeTamanhoService.categoriaPossuiGradeAtiva(idCategoria);
+	    
 	    List<Produto> ordenados = produtos.stream()
-	        .filter(Objects::nonNull)
-	        .sorted(Comparator.comparing(p -> msg.safe(p.getNome()), String.CASE_INSENSITIVE_ORDER))
-	        .toList();
+    	    .filter(Objects::nonNull)
+
+    	    // Produtos sem preço configurado não devem aparecer para o cliente.
+    	    .filter(p -> {
+    	        if (categoriaUsaTamanhos) {
+    	            // Em categorias com tamanhos, o produto só aparece se tiver ao menos um tamanho ativo com preço válido.
+    	            return opcaoTamanhoProdutoRepository.existsByProdutoIdAndAtivoTrueAndPrecoGreaterThan(
+    	                p.getId(),
+    	                BigDecimal.ZERO
+    	            );
+    	        }
+
+    	        return p.getPreco() != null
+    	            && p.getPreco().compareTo(BigDecimal.ZERO) > 0;
+    	    })
+
+    	    .sorted(Comparator.comparing(p -> msg.safe(p.getNome()), String.CASE_INSENSITIVE_ORDER))
+    	    .toList();
 
 	    String nomeCategoria = extracaoService.extrairNomeCategoria(estabelecimento, idCategoria);
 	    String tituloCategoria = (nomeCategoria == null ? ("Categoria #" + idCategoria) : nomeCategoria);
@@ -264,12 +282,11 @@ public class MenuClienteService {
 	    int paginaAtual = (safeOffset / pageSizeProdutos) + 1;
 	    int paginasTotal = (int) Math.ceil(total / (double) pageSizeProdutos);
 
-	    //lista de produtos da categoria selecionada
-	    boolean categoriaUsaTamanhos = gradeTamanhoService.categoriaPossuiGradeAtiva(idCategoria);
-	    
-	    String cabecalho =
-	        tituloCategoria + ":\n" +
-	            "Página " + paginaAtual + " de " + paginasTotal;
+	    String cabecalho = tituloCategoria + ":";
+
+	    if (paginasTotal > 1) {
+	        cabecalho += "\nPágina " + paginaAtual + " de " + paginasTotal;
+	    }
 
 	    
 	    List<MensagemInterativaItemListaWhatsappDTO> itens = page.stream()
@@ -694,45 +711,7 @@ public class MenuClienteService {
         return "Dinheiro";
     }
 
-    public MensagemWhatsappSaidaDTO montarSugestaoEnderecoAnterior(
-        String whatsappCliente,
-        String enderecoAnterior,
-        BigDecimal taxaEntrega
-    ) {
-
-        BigDecimal taxa = (taxaEntrega == null) ? BigDecimal.ZERO : taxaEntrega;
-
-        String corpo =
-            "Encontrei um endereço usado no seu último pedido:\n\n" +
-                msg.trunc(enderecoAnterior, 900) + "\n\n" +
-                "🚚 Taxa de entrega para este pedido: " + msg.formatarMoeda(taxa) + "\n\n" +
-                "Deseja usar esse mesmo?";
-
-        return msg.botoes(
-            whatsappCliente,
-            msg.trunc(corpo, 1024),
-            List.of(
-                helperService.btn("COMANDO|FAZER_PEDIDO_COM_ENDERECO_ANTERIOR", "✅ Usar esse mesmo"),
-                helperService.btn("COMANDO|INFORMAR_OUTRO_ENDERECO", "✏️ Alterar endereço")
-            )
-        );
-    }
-
-    public MensagemWhatsappSaidaDTO montarSolicitacaoEnderecoEntrega(String whatsappCliente) {
-
-        String corpo =
-            "Perfeito! ✅ Agora me informe o *endereço de entrega*.\n\n" +
-                "Inclua também *observações úteis pro entregador*, como:\n" +
-                "- ponto de referência\n" +
-                "- bloco/apto\n" +
-                "- interfone\n" +
-                "- portaria / instruções de acesso\n\n" +
-                "Exemplo:\n" +
-                "Rua X, 123 - Apto 45, Bairro Y. Obs: interfone 45, portaria 24h.";
-
-        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
-    }
-
+    
     public MensagemWhatsappSaidaDTO montarConfirmacaoPedidoEnviado(
         String whatsappCliente,
         Long idPedido,
@@ -770,60 +749,14 @@ public class MenuClienteService {
         return precoUnit.multiply(BigDecimal.valueOf(quantidade));
     }
 
-    public MensagemWhatsappSaidaDTO montarSolicitacaoCepEntrega(String whatsappCliente) {
-
-        String corpo =
-            "Perfeito! ✅\n\n" +
-                "Agora me informe o *CEP de entrega*.\n\n" +
-                "Exemplos:\n" +
-                "24350-000\n" +
-                "ou\n" +
-                "24350000";
-
-        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
-    }
-
-    public MensagemWhatsappSaidaDTO montarEnderecoEncontradoSolicitarComplemento(
-        String whatsappCliente,
-        String enderecoBase
-    ) {
-
-        String corpo =
-            "Encontrei este endereço pelo CEP:\n\n" +
-                "*" + msg.trunc(enderecoBase, 500) + "*\n\n" +
-                "Agora me informe o *complemento* (número, apto/bloco, ponto de referência, etc.).\n\n" +
-                "Você pode incluir observações assim:\n" +
-                "- Obs: interfone 45\n" +
-                "- Obs: portaria 24h";
-
-        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
-    }
-
-    public MensagemWhatsappSaidaDTO montarSolicitacaoEnderecoCompletoFallback(String whatsappCliente) {
-
-        String corpo =
-            "Não consegui localizar o endereço pelo CEP 😕\n\n" +
-                "Por favor, me envie o *endereço completo* (rua, número, bairro) e, se quiser, observações pro entregador.\n\n" +
-                "Exemplo:\n" +
-                "Rua X, 123 - Apto 45, Bairro Y. Obs: interfone 45, portaria 24h.";
-
-        return msg.texto(whatsappCliente, msg.trunc(corpo, 4096));
-    }
     
-    
-    public boolean produtoPossuiComplementosPorCategoria(Produto produto) {
+    public boolean produtoPossuiComplementos(Produto produto) {
 
-        if (produto == null || produto.getCategoria() == null || produto.getCategoria().getId() == null) {
+        if (produto == null || produto.getId() == null) {
             return false;
         }
 
-        List<GrupoComplementoCategoriaProduto> grupos = grupoComplementoCategoriaProdutoRepository
-            .findByCategoriaIdAndAtivoTrueOrderByOrdemAsc(produto.getCategoria().getId());
-
-        return grupos.stream()
-            .anyMatch(associacao -> associacao.getGrupo() != null
-                && associacao.getGrupo().isAtivo()
-                && !associacao.getGrupo().isExcluido());
+        return !buscarGruposComplementoAplicaveis(produto).isEmpty();
     }
 
     public MensagemWhatsappSaidaDTO montarListaComplementosEmMontagem(
@@ -843,13 +776,7 @@ public class MenuClienteService {
             return msg.texto(whatsappCliente, "Não consegui identificar os complementos deste produto.");
         }
 
-        List<GrupoComplementoCategoriaProduto> grupos = grupoComplementoCategoriaProdutoRepository
-            .findByCategoriaIdAndAtivoTrueOrderByOrdemAsc(produto.getCategoria().getId())
-            .stream()
-            .filter(associacao -> associacao.getGrupo() != null)
-            .filter(associacao -> associacao.getGrupo().isAtivo())
-            .filter(associacao -> !associacao.getGrupo().isExcluido())
-            .toList();
+        List<GrupoComplemento> grupos = buscarGruposComplementoAplicaveis(produto);
 
         if (grupos.isEmpty()) {
         	// =========================================================
@@ -886,10 +813,10 @@ public class MenuClienteService {
     		);
         }
 
-        GrupoComplementoCategoriaProduto associacaoAtual = grupos.get(posicaoAtual - 1);
+        GrupoComplemento grupoAtual = grupos.get(posicaoAtual - 1);
 
         List<Complemento> complementos = complementoRepository
-            .findByGrupoIdAndAtivoTrueOrderByNomeAsc(associacaoAtual.getGrupo().getId());
+            .findByGrupoIdAndAtivoTrueOrderByNomeAsc(grupoAtual.getId());
 
         if (complementos.isEmpty()) {
         	return montarListaQuantidades(
@@ -934,7 +861,7 @@ public class MenuClienteService {
     	    ));
     	}
 
-    	Integer maximoSelecoes = associacaoAtual.getGrupo().getMaximoSelecoes();
+    	Integer maximoSelecoes = grupoAtual.getMaximoSelecoes();
 
     	int quantidadeSelecionadaGrupoAtual = 0;
 
@@ -1039,15 +966,13 @@ public class MenuClienteService {
  	// =========================================================
     public boolean produtoPossuiTamanhos(Produto produto) {
 
-        if (produto == null || produto.getId() == null || produto.getCategoria() == null || produto.getCategoria().getId() == null) {
+        if (produto == null || produto.getId() == null) {
             return false;
         }
 
-        GradeTamanhoCategoriaProduto associacao = gradeTamanhoCategoriaProdutoRepository
-            .findFirstByCategoriaIdAndAtivoTrue(produto.getCategoria().getId())
-            .orElse(null);
+        GradeTamanho gradeAplicavel = gradeTamanhoService.buscarGradeAplicavelAoProduto(produto);
 
-        if (associacao == null || associacao.getGrade() == null || !associacao.getGrade().isAtivo() || associacao.getGrade().isExcluido()) {
+        if (gradeAplicavel == null) {
             return false;
         }
 
@@ -1056,6 +981,8 @@ public class MenuClienteService {
             .stream()
             .anyMatch(opcaoProduto -> opcaoProduto.getOpcaoTamanho() != null
                 && opcaoProduto.getOpcaoTamanho().isAtivo()
+                && opcaoProduto.getOpcaoTamanho().getGrade() != null
+                && Objects.equals(opcaoProduto.getOpcaoTamanho().getGrade().getId(), gradeAplicavel.getId())
                 && opcaoProduto.getPreco() != null);
     }
 
@@ -1074,11 +1001,9 @@ public class MenuClienteService {
             return msg.texto(whatsappCliente, "Produto não encontrado.");
         }
 
-        GradeTamanhoCategoriaProduto associacao = gradeTamanhoCategoriaProdutoRepository
-            .findFirstByCategoriaIdAndAtivoTrue(produto.getCategoria().getId())
-            .orElse(null);
+        GradeTamanho gradeAplicavel = gradeTamanhoService.buscarGradeAplicavelAoProduto(produto);
 
-        if (associacao == null || associacao.getGrade() == null || !associacao.getGrade().isAtivo() || associacao.getGrade().isExcluido()) {
+        if (gradeAplicavel == null) {
             return montarSelecaoProduto(
                 estabelecimento,
                 whatsappCliente,
@@ -1094,6 +1019,8 @@ public class MenuClienteService {
     	    .stream()
     	    .filter(opcaoProduto -> opcaoProduto.getOpcaoTamanho() != null)
     	    .filter(opcaoProduto -> opcaoProduto.getOpcaoTamanho().isAtivo())
+    	    .filter(opcaoProduto -> opcaoProduto.getOpcaoTamanho().getGrade() != null)
+    	    .filter(opcaoProduto -> Objects.equals(opcaoProduto.getOpcaoTamanho().getGrade().getId(), gradeAplicavel.getId()))
     	    .filter(opcaoProduto -> opcaoProduto.getPreco() != null)
 
     	    // Exibe os tamanhos do mais caro para o mais barato para destacar versões premium primeiro.
@@ -1142,5 +1069,27 @@ public class MenuClienteService {
             "Tamanhos",
             itens
         );
+    }
+    
+    private List<GrupoComplemento> buscarGruposComplementoAplicaveis(Produto produto) {
+
+        if (produto == null || produto.getId() == null) {
+            return List.of();
+        }
+
+        List<GrupoComplemento> gruposProduto = grupoComplementoRepository
+            .findByProdutoIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getId());
+
+        // Complementos próprios do produto têm prioridade sobre os herdados da categoria.
+        if (!gruposProduto.isEmpty()) {
+            return gruposProduto;
+        }
+
+        if (produto.getCategoria() == null || produto.getCategoria().getId() == null) {
+            return List.of();
+        }
+
+        return grupoComplementoRepository
+            .findByCategoriaIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getCategoria().getId());
     }
 }

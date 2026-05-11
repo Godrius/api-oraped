@@ -14,11 +14,14 @@ import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.service.EstabelecimentoService;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
 import br.com.oraped.service.whatsapp.administrador.AdminCategoriaService;
+import br.com.oraped.service.whatsapp.administrador.AdminComplementoCategoriaService;
+import br.com.oraped.service.whatsapp.administrador.AdminComplementoProdutoService;
 import br.com.oraped.service.whatsapp.administrador.AdminEntregaService;
 import br.com.oraped.service.whatsapp.administrador.AdminGrupoComplementoService;
 import br.com.oraped.service.whatsapp.administrador.AdminMarcaService;
 import br.com.oraped.service.whatsapp.administrador.AdminProdutoService;
-import br.com.oraped.service.whatsapp.administrador.AdminTamanhoService;
+import br.com.oraped.service.whatsapp.administrador.AdminTamanhoCategoriaService;
+import br.com.oraped.service.whatsapp.administrador.AdminTamanhoProdutoService;
 import br.com.oraped.service.whatsapp.administrador.MenuAdminService;
 import br.com.oraped.service.whatsapp.administrador.ValidadorAdminService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
@@ -61,8 +64,11 @@ public class OrquestradorTextoLivreService {
     private final AdminMarcaService adminMarcaService;
     private final ValidadorAdminService validadorAdminService;
     private final AdminGrupoComplementoService adminGrupoComplementoService;
+    private final AdminComplementoProdutoService adminComplementoProdutoService;
+    private final AdminComplementoCategoriaService adminComplementoCategoriaService;
     private final AdminCategoriaService adminCategoriaService;
-    private final AdminTamanhoService adminTamanhoService;
+    private final AdminTamanhoCategoriaService adminTamanhoCategoriaService;
+    private final AdminTamanhoProdutoService adminTamanhoProdutoService;
     
     private final EstabelecimentoService estabelecimentoService;
 
@@ -247,6 +253,30 @@ public class OrquestradorTextoLivreService {
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 	        
+	        if (sessaoAdminComplementoService.isAguardandoNovoComplementoCategoria(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoCategoriaService.concluirCadastroGuiadoComplementoCategoria(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
+	        if (sessaoAdminComplementoService.isAguardandoNovoComplementoProduto(idSessao)) {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminComplementoProdutoService.concluirCadastroGuiadoComplementoProduto(
+	                    estabelecimento,
+	                    whatsappCliente,
+	                    idSessao,
+	                    parse.safeTextoEntrada(req)
+	                );
+
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
 	        if (sessaoAdminComplementoService.isAguardandoNovoPrecoComplemento(idSessao)) {
 	            var r = adminGrupoComplementoService.concluirPrecoManualComplementoGlobalPorDigitacao(
 	                estabelecimento,
@@ -286,20 +316,9 @@ public class OrquestradorTextoLivreService {
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
 	        
-	        if (sessaoAdminTamanhoService.isAguardandoNovoPrecoProdutoTamanho(idSessao)) {
-	            AdministradorWhatsappResultados.ResultadoAdmin r =
-	            	adminTamanhoService.concluirAlteracaoPrecoTamanhoProduto(
-	                    estabelecimento,
-	                    whatsappCliente,
-	                    idSessao,
-	                    parse.safeTextoEntrada(req)
-	                );
-
-	            return new RoteamentoResultado(r.chave, r.mensagem);
-	        }
-	        
 	        if (sessaoAdminProdutoService.isAguardandoNovoPreco(idSessao)) {
-	            AdministradorWhatsappResultados.ResultadoAdminPreco r =
+
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
 	                adminProdutoService.concluirPrecoManualProdutoPorDigitacao(
 	                    estabelecimento,
 	                    whatsappCliente,
@@ -307,20 +326,10 @@ public class OrquestradorTextoLivreService {
 	                    parse.safeTextoEntrada(req)
 	                );
 
-	            String corpoConfirmacao =
-	                "✅ Preço atualizado!\n\n" +
-	                    "*" + msg.trunc(msg.safe(r.nomeProduto), 80) + "*\n" +
-	                    msg.trunc(msg.safe(r.descricaoProduto), 500) + "\n\n" +
-	                    "*Novo preço:* " + msg.formatarMoeda(r.novoPreco);
-
-	            MensagemWhatsappSaidaDTO confirmacao = msg.texto(
-	                whatsappCliente,
-	                msg.trunc(corpoConfirmacao, 1024)
+	            return new RoteamentoResultado(
+	                "admin_preco_atualizado_digitacao",
+	                r.mensagem
 	            );
-
-	            List<MensagemWhatsappSaidaDTO> extras = List.of(r.admin.mensagem);
-
-	            return new RoteamentoResultado("admin_preco_atualizado_digitacao", confirmacao, extras);
 	        }
 
 	        if (sessaoAdminProdutoService.isAguardandoNovoNomeProduto(idSessao)) {
@@ -490,12 +499,60 @@ public class OrquestradorTextoLivreService {
 	            return new RoteamentoResultado(r.chave, r.mensagem, List.of(listaAtualizada, navegacao));
 	        }
 	        
-		    // -----------------------------------------------------
-		    // 3.5) ADMIN: TAMANHOS
-		    // -----------------------------------------------------
+	        // -----------------------------------------------------
+	        // 3.5) ADMIN: TAMANHOS
+	        // -----------------------------------------------------
+	        if (sessaoAdminTamanhoService.isAguardandoNovoTamanhoProduto(idSessao)) {
+	        	AdministradorWhatsappResultados.ResultadoAdmin r =
+	        		adminTamanhoProdutoService.concluirCadastroTamanhoProdutoPorDigitacao(
+		                 estabelecimento,
+		                 whatsappCliente,
+		                 idSessao,
+		                 parse.safeTextoEntrada(req)
+	        	);
+	
+	        	return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	
+	        if (sessaoAdminTamanhoService.isAguardandoNovoPrecoProdutoTamanho(idSessao)) {
+		         AdministradorWhatsappResultados.ResultadoAdmin r =
+		             adminTamanhoProdutoService.concluirAlteracaoPrecoTamanhoProduto(
+		                 estabelecimento,
+		                 whatsappCliente,
+		                 idSessao,
+		                 parse.safeTextoEntrada(req)
+		             );
+	
+		         return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	
 	        if (sessaoAdminTamanhoService.isAguardandoDescricaoOpcaoTamanho(idSessao)) {
+		         AdministradorWhatsappResultados.ResultadoAdmin r =
+		             adminTamanhoCategoriaService.concluirAlteracaoDescricaoOpcaoTamanho(
+		                 estabelecimento,
+		                 whatsappCliente,
+		                 idSessao,
+		                 parse.safeTextoEntrada(req)
+		             );
+	
+		         return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	
+	        if (sessaoAdminTamanhoService.isAguardandoNovaOpcaoTamanho(idSessao)) {
+		         AdministradorWhatsappResultados.ResultadoAdmin r =
+		             adminTamanhoCategoriaService.concluirCadastroOpcaoTamanho(
+		                 estabelecimento,
+		                 whatsappCliente,
+		                 idSessao,
+		                 parse.safeTextoEntrada(req)
+		             );
+	
+		         return new RoteamentoResultado(r.chave, r.mensagem);
+		    }
+		     
+	        if (sessaoAdminTamanhoService.isAguardandoNovoNomeTamanhoProduto(idSessao)) {
 	            AdministradorWhatsappResultados.ResultadoAdmin r =
-	            	adminTamanhoService.concluirAlteracaoDescricaoOpcaoTamanho(
+	                adminTamanhoProdutoService.concluirAlteracaoNomeTamanhoProdutoPorDigitacao(
 	                    estabelecimento,
 	                    whatsappCliente,
 	                    idSessao,
@@ -504,20 +561,6 @@ public class OrquestradorTextoLivreService {
 
 	            return new RoteamentoResultado(r.chave, r.mensagem);
 	        }
-	        
-	        if (sessaoAdminTamanhoService.isAguardandoNovaOpcaoTamanho(idSessao)) {
-	        	AdministradorWhatsappResultados.ResultadoAdmin r =
-	        		adminTamanhoService.concluirCadastroOpcaoTamanho(
-	        			estabelecimento,
-		                whatsappCliente,
-		                idSessao,
-		                parse.safeTextoEntrada(req)
-		            );
-	
-		        return new RoteamentoResultado(r.chave, r.mensagem);
-		    }
-		     
-		     
 		     
 		    // -----------------------------------------------------
 		    // 3.6) ADMIN: CATEGORIAS E PRODUTOS
@@ -740,16 +783,19 @@ public class OrquestradorTextoLivreService {
         sessaoAdminProdutoService.limparAguardandoNovaFotoProduto(idSessao);
         sessaoAdminProdutoService.limparAguardandoNovoProduto(idSessao);
         
+        sessaoAdminTamanhoService.limparAguardandoNovoNomeTamanhoProduto(idSessao);
         sessaoAdminTamanhoService.limparAguardandoNovaOpcaoTamanho(idSessao);
         sessaoAdminTamanhoService.limparAguardandoDescricaoOpcaoTamanho(idSessao);
         sessaoAdminTamanhoService.limparAguardandoNovoPrecoProdutoTamanho(idSessao);
-        sessaoAdminTamanhoService.limparAguardandoNovoPrecoProdutoTamanho(idSessao);
+        sessaoAdminTamanhoService.limparAguardandoNovoTamanhoProduto(idSessao);
         
         sessaoAdminCategoriaService.limparAguardandoNovaCategoria(idSessao);
         
         sessaoAdminComplementoService.limparAguardandoEditarNomeComplementoGlobal(idSessao);
         sessaoAdminComplementoService.limparAguardandoNovoPrecoComplemento(idSessao);
-
+        sessaoAdminComplementoService.limparAguardandoNovoComplementoProduto(idSessao);
+        sessaoAdminComplementoService.limparAguardandoNovoComplementoCategoria(idSessao);
+        
         sessaoAdminEntregaService.limparAguardandoCepEstabelecimento(idSessao);
         sessaoAdminEntregaService.limparAguardandoTaxaEntregaBairro(idSessao);
         sessaoAdminEntregaService.limparAguardandoTaxaEntregaPadrao(idSessao);

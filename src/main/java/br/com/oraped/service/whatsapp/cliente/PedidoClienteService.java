@@ -22,7 +22,7 @@ import br.com.oraped.domain.enums.TipoAtendimento;
 import br.com.oraped.domain.geolocalizacao.Bairro;
 import br.com.oraped.domain.produto.Produto;
 import br.com.oraped.domain.produto.complemento.Complemento;
-import br.com.oraped.domain.produto.complemento.GrupoComplementoCategoriaProduto;
+import br.com.oraped.domain.produto.complemento.GrupoComplemento;
 import br.com.oraped.domain.produto.tamanho.OpcaoTamanhoProduto;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.domain.whatsapp.SessaoAtendimentoWhatsapp;
@@ -34,7 +34,7 @@ import br.com.oraped.dto.PedidoResponseDTO;
 import br.com.oraped.dto.geolocalizacao.EnderecoResolvidoDTO;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.repository.produto.complemento.ComplementoRepository;
-import br.com.oraped.repository.produto.complemento.GrupoComplementoCategoriaProdutoRepository;
+import br.com.oraped.repository.produto.complemento.GrupoComplementoRepository;
 import br.com.oraped.repository.produto.tamanho.OpcaoTamanhoProdutoRepository;
 import br.com.oraped.service.EstabelecimentoService;
 import br.com.oraped.service.carrinho.CarrinhoService;
@@ -69,6 +69,7 @@ public class PedidoClienteService {
     private final SessaoWhatsappClienteService sessaoClienteService;
     private final SessaoWhatsappMarketplaceService sessaoMarketplaceService;
     
+    private final EnderecoClienteService enderecoClienteService;
     private final CarrinhoClienteService carrinhoService;
     private final MenuClienteService menusClienteService;
     private final OrquestradorExtracaoEstabelecimentoService extracaoService;
@@ -82,7 +83,7 @@ public class PedidoClienteService {
     private final SessaoItemCarrinhoEmMontagemService itemEmMontagemService;
     private final CarrinhoService carrinhoPersistenciaService;
     private final GrupoComplementoService grupoComplementoService;
-    private final GrupoComplementoCategoriaProdutoRepository grupoComplementoCategoriaProdutoRepository;
+    private final GrupoComplementoRepository grupoComplementoRepository;
     private final ComplementoRepository complementoRepository;
     private final OpcaoTamanhoProdutoRepository opcaoTamanhoProdutoRepository;
     
@@ -160,7 +161,7 @@ public class PedidoClienteService {
 
 	            return new RoteamentoResultado(
 	                "sugestao_endereco_anterior",
-	                menusClienteService.montarSugestaoEnderecoAnterior(
+	                enderecoClienteService.montarSugestaoEnderecoAnterior(
 	                    whatsappCliente,
 	                    ultimoPedido.getEnderecoEntrega(),
 	                    taxaAtual
@@ -172,7 +173,7 @@ public class PedidoClienteService {
 	    sessaoClienteService.marcarAguardandoCepEntrega(idSessao);
 	    return new RoteamentoResultado(
 	        "solicitar_cep_entrega",
-	        menusClienteService.montarSolicitacaoCepEntrega(whatsappCliente)
+	        enderecoClienteService.montarSolicitacaoCepEntrega(whatsappCliente, false)
 	    );
 	}
 
@@ -197,7 +198,7 @@ public class PedidoClienteService {
 	    if (ultimoPedido == null || !StringUtils.hasText(ultimoPedido.getEnderecoEntrega())) {
 	        sessaoClienteService.marcarAguardandoCepEntrega(idSessao);
 
-	        MensagemWhatsappSaidaDTO m = menusClienteService.montarSolicitacaoCepEntrega(whatsappCliente);
+	        MensagemWhatsappSaidaDTO m = enderecoClienteService.montarSolicitacaoCepEntrega(whatsappCliente, false);
 	        return new RoteamentoResultado("solicitar_cep_entrega", m);
 	    }
 
@@ -327,7 +328,7 @@ public class PedidoClienteService {
 	        sessaoClienteService.marcarAguardandoCepEntrega(idSessao);
 	        return new RoteamentoResultado(
 	            "solicitar_cep_entrega",
-	            menusClienteService.montarSolicitacaoCepEntrega(whatsappCliente)
+	            enderecoClienteService.montarSolicitacaoCepEntrega(whatsappCliente, false)
 	        );
 	    }
 
@@ -605,7 +606,7 @@ public class PedidoClienteService {
 	        sessaoClienteService.marcarAguardandoCepEntrega(idSessao);
 	        return new RoteamentoResultado(
 	            "solicitar_cep_entrega",
-	            menusClienteService.montarSolicitacaoCepEntrega(whatsappCliente)
+	            enderecoClienteService.montarSolicitacaoCepEntrega(whatsappCliente, false)
 	        );
 	    }
 
@@ -810,7 +811,7 @@ public class PedidoClienteService {
 	        }
 
 	        sessaoClienteService.marcarAguardandoEnderecoCompletoFallback(idSessao);
-	        return menusClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
+	        return enderecoClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
 	    }
 
 	    if (end == null
@@ -829,7 +830,7 @@ public class PedidoClienteService {
 	        }
 
 	        sessaoClienteService.marcarAguardandoEnderecoCompletoFallback(idSessao);
-	        return menusClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
+	        return enderecoClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
 	    }
 
 	    // ================================
@@ -905,7 +906,7 @@ public class PedidoClienteService {
 
 	    sessaoClienteService.marcarAguardandoComplementoEndereco(idSessao);
 
-	    return menusClienteService.montarEnderecoEncontradoSolicitarComplemento(
+	    return enderecoClienteService.montarEnderecoEncontradoSolicitarComplemento(
 	        whatsappCliente,
 	        enderecoBase
 	    );
@@ -993,14 +994,14 @@ public class PedidoClienteService {
 
 	    if (!StringUtils.hasText(raw) || "(vazio)".equals(raw)) {
 	        sessaoClienteService.marcarAguardandoEnderecoCompletoFallback(idSessao);
-	        return menusClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
+	        return enderecoClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
 	    }
 
 	    ParsedEndereco parsed = parseEnderecoEObservacoes(raw);
 
 	    if (!StringUtils.hasText(parsed.endereco)) {
 	        sessaoClienteService.marcarAguardandoEnderecoCompletoFallback(idSessao);
-	        return menusClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
+	        return enderecoClienteService.montarSolicitacaoEnderecoCompletoFallback(whatsappCliente);
 	    }
 
 	    BigDecimal taxa = estabelecimento.getTaxaEntregaPadrao();
@@ -1107,116 +1108,109 @@ public class PedidoClienteService {
     
     @Transactional
     public RoteamentoResultado tratarSelecionarComplemento(
-	    Estabelecimento estabelecimento,
-	    String whatsappCliente,
-	    Long idSessao,
-	    Long idComplemento
-	) {
+        Estabelecimento estabelecimento,
+        String whatsappCliente,
+        Long idSessao,
+        Long idComplemento
+    ) {
 
-	    if (idSessao == null) {
-	        return new RoteamentoResultado(
-	            "sessao_nao_encontrada",
-	            msg.texto(whatsappCliente, "Não consegui identificar sua sessão. Por favor, tente iniciar novamente.")
-	        );
-	    }
+        if (idSessao == null) {
+            return new RoteamentoResultado(
+                "sessao_nao_encontrada",
+                msg.texto(whatsappCliente, "Não consegui identificar sua sessão. Por favor, tente iniciar novamente.")
+            );
+        }
 
-	    SessaoAtendimentoWhatsapp sessao = sessaoService.buscarPorId(idSessao);
+        SessaoAtendimentoWhatsapp sessao = sessaoService.buscarPorId(idSessao);
 
-	    Produto produto = extracaoService.extrairProduto(
-	        estabelecimento,
-	        sessao.getIdProdutoItemEmMontagem()
-	    );
+        Produto produto = extracaoService.extrairProduto(
+            estabelecimento,
+            sessao.getIdProdutoItemEmMontagem()
+        );
 
-	    if (produto == null || produto.getCategoria() == null || produto.getCategoria().getId() == null) {
-	        return new RoteamentoResultado(
-	            "item_montagem_invalido",
-	            msg.texto(whatsappCliente, "Não consegui identificar o produto em montagem. Por favor, escolha o produto novamente.")
-	        );
-	    }
+        if (produto == null || produto.getId() == null) {
+            return new RoteamentoResultado(
+                "item_montagem_invalido",
+                msg.texto(whatsappCliente, "Não consegui identificar o produto em montagem. Por favor, escolha o produto novamente.")
+            );
+        }
 
-	    List<GrupoComplementoCategoriaProduto> grupos = grupoComplementoCategoriaProdutoRepository
-	        .findByCategoriaIdAndAtivoTrueOrderByOrdemAsc(produto.getCategoria().getId())
-	        .stream()
-	        .filter(associacao -> associacao.getGrupo() != null)
-	        .filter(associacao -> associacao.getGrupo().isAtivo())
-	        .filter(associacao -> !associacao.getGrupo().isExcluido())
-	        .toList();
+        List<GrupoComplemento> grupos = buscarGruposComplementoAplicaveis(produto);
 
-	    if (grupos.isEmpty()) {
-	        return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
-	    }
+        if (grupos.isEmpty()) {
+            return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
+        }
 
-	    int posicaoAtual = sessao.getOrdemGrupoComplementoItemEmMontagem() == null
-	        ? 1
-	        : sessao.getOrdemGrupoComplementoItemEmMontagem();
+        int posicaoAtual = sessao.getOrdemGrupoComplementoItemEmMontagem() == null
+            ? 1
+            : sessao.getOrdemGrupoComplementoItemEmMontagem();
 
-	    if (posicaoAtual < 1) {
-	        posicaoAtual = 1;
-	    }
+        if (posicaoAtual < 1) {
+            posicaoAtual = 1;
+        }
 
-	    if (posicaoAtual > grupos.size()) {
-	        return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
-	    }
+        if (posicaoAtual > grupos.size()) {
+            return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
+        }
 
-	    GrupoComplementoCategoriaProduto associacaoAtual = grupos.get(posicaoAtual - 1);
-	    Long idGrupoAtual = associacaoAtual.getGrupo().getId();
+        GrupoComplemento grupoAtual = grupos.get(posicaoAtual - 1);
 
-	    Complemento complemento = grupoComplementoService.buscarComplementoObrigatorio(idComplemento);
+        Complemento complemento = grupoComplementoService.buscarComplementoObrigatorio(idComplemento);
 
-	    if (complemento == null || !complemento.isAtivo()) {
-	        return new RoteamentoResultado(
-	            "complemento_indisponivel",
-	            msg.texto(whatsappCliente, "Esse complemento não está disponível no momento.")
-	        );
-	    }
+        if (complemento == null || !complemento.isAtivo()) {
+            return new RoteamentoResultado(
+                "complemento_indisponivel",
+                msg.texto(whatsappCliente, "Esse complemento não está disponível no momento.")
+            );
+        }
 
-	    Set<Long> idsComplementosDoGrupoAtual = complementoRepository
-	        .findByGrupoIdAndAtivoTrueOrderByNomeAsc(idGrupoAtual)
-	        .stream()
-	        .map(Complemento::getId)
-	        .collect(Collectors.toSet());
+        Set<Long> idsComplementosDoGrupoAtual = complementoRepository
+            .findByGrupoIdAndAtivoTrueOrderByNomeAsc(grupoAtual.getId())
+            .stream()
+            .map(Complemento::getId)
+            .collect(Collectors.toSet());
 
-	    if (!idsComplementosDoGrupoAtual.contains(complemento.getId())) {
-	        return new RoteamentoResultado(
-	            "complemento_fora_do_grupo_atual",
-	            msg.texto(whatsappCliente, "Esse complemento não pertence à etapa atual do pedido.")
-	        );
-	    }
+        if (!idsComplementosDoGrupoAtual.contains(complemento.getId())) {
+            return new RoteamentoResultado(
+                "complemento_fora_do_grupo_atual",
+                msg.texto(whatsappCliente, "Esse complemento não pertence à etapa atual do pedido.")
+            );
+        }
 
-	    int maximoSelecoes = associacaoAtual.getGrupo().getMaximoSelecoes() == null
-	        ? 0
-	        : associacaoAtual.getGrupo().getMaximoSelecoes();
+        int maximoSelecoes = grupoAtual.getMaximoSelecoes() == null
+            ? 0
+            : grupoAtual.getMaximoSelecoes();
 
-	    int quantidadeSelecionadaAntes = contarComplementosSelecionadosDoGrupoAtual(
-	        idSessao,
-	        idsComplementosDoGrupoAtual
-	    );
+        int quantidadeSelecionadaAntes = contarComplementosSelecionadosDoGrupoAtual(
+            idSessao,
+            idsComplementosDoGrupoAtual
+        );
 
-	    if (maximoSelecoes > 0 && quantidadeSelecionadaAntes >= maximoSelecoes) {
-	        return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
-	    }
+        if (maximoSelecoes > 0 && quantidadeSelecionadaAntes >= maximoSelecoes) {
+            return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
+        }
 
-	    // A seleção é acumulativa até atingir o limite máximo configurado no grupo atual.
-	    itemEmMontagemService.adicionarComplemento(idSessao, complemento);
+        // A seleção é acumulativa até atingir o limite máximo configurado no grupo atual.
+        itemEmMontagemService.adicionarComplemento(idSessao, complemento);
 
-	    int quantidadeSelecionadaDepois = contarComplementosSelecionadosDoGrupoAtual(
-	        idSessao,
-	        idsComplementosDoGrupoAtual
-	    );
+        int quantidadeSelecionadaDepois = contarComplementosSelecionadosDoGrupoAtual(
+            idSessao,
+            idsComplementosDoGrupoAtual
+        );
 
-	    if (maximoSelecoes > 0 && quantidadeSelecionadaDepois >= maximoSelecoes) {
-	        return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
-	    }
+        if (maximoSelecoes > 0 && quantidadeSelecionadaDepois >= maximoSelecoes) {
+            return montarTelaQuantidadeAposComplementos(estabelecimento, whatsappCliente, idSessao, sessao);
+        }
 
-	    return new RoteamentoResultado(
-	        "complemento_adicionado",
-	        menusClienteService.montarListaComplementosEmMontagem(
-	            estabelecimento,
-	            whatsappCliente,
-	            idSessao
-	        )
-	    );
-	}
+        return new RoteamentoResultado(
+            "complemento_adicionado",
+            menusClienteService.montarListaComplementosEmMontagem(
+                estabelecimento,
+                whatsappCliente,
+                idSessao
+            )
+        );
+    }
 
     private int contarComplementosSelecionadosDoGrupoAtual(
 	    Long idSessao,
@@ -1366,7 +1360,7 @@ public class PedidoClienteService {
             opcaoTamanhoProduto
         );
 
-        if (menusClienteService.produtoPossuiComplementosPorCategoria(produto)) {
+        if (menusClienteService.produtoPossuiComplementos(produto)) {
             return new RoteamentoResultado(
                 "listar_complementos_apos_tamanho",
                 menusClienteService.montarListaComplementosEmMontagem(
@@ -1388,5 +1382,28 @@ public class PedidoClienteService {
                 produto.getId()
             )
         );
+    }
+    
+    
+    private List<GrupoComplemento> buscarGruposComplementoAplicaveis(Produto produto) {
+
+        if (produto == null || produto.getId() == null) {
+            return List.of();
+        }
+
+        List<GrupoComplemento> gruposProduto = grupoComplementoRepository
+            .findByProdutoIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getId());
+
+        // Complementos próprios do produto têm prioridade sobre os herdados da categoria.
+        if (!gruposProduto.isEmpty()) {
+            return gruposProduto;
+        }
+
+        if (produto.getCategoria() == null || produto.getCategoria().getId() == null) {
+            return List.of();
+        }
+
+        return grupoComplementoRepository
+            .findByCategoriaIdAndAtivoTrueAndExcluidoFalseOrderByOrdemAscNomeAsc(produto.getCategoria().getId());
     }
 }

@@ -76,6 +76,97 @@ public class SessaoWhatsappAdminTamanhoService {
 
         sessaoStore.salvar(sessao);
     }
+    
+    
+    @Transactional(readOnly = true)
+    public boolean isAguardandoNovoNomeTamanhoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        return Boolean.TRUE.equals(sessao.getAguardandoNovoNomeTamanhoProduto())
+            && sessao.getIdProdutoNovoNomeTamanhoProduto() != null
+            && sessao.getIdCategoriaNovoNomeTamanhoProduto() != null
+            && sessao.getIdOpcaoTamanhoNovoNomeProduto() != null;
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdProdutoNovoNomeTamanhoProduto(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdProdutoNovoNomeTamanhoProduto();
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdCategoriaNovoNomeTamanhoProduto(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdCategoriaNovoNomeTamanhoProduto();
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdOpcaoTamanhoNovoNomeProduto(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdOpcaoTamanhoNovoNomeProduto();
+    }
+
+    @Transactional(readOnly = true)
+    public Integer getOffsetListaNovoNomeTamanhoProduto(Long idSessao) {
+        Integer offset = sessaoStore.buscarPorId(idSessao).getOffsetListaNovoNomeTamanhoProduto();
+        return normalizarOffset(offset);
+    }
+
+    @Transactional
+    public void marcarAguardandoNovoNomeTamanhoProduto(
+        Long idSessao,
+        Long idProduto,
+        Long idCategoria,
+        Long idOpcaoTamanho,
+        Integer offsetLista
+    ) {
+
+        if (idProduto == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idProduto é obrigatório");
+        }
+
+        if (idCategoria == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idCategoria é obrigatório");
+        }
+
+        if (idOpcaoTamanho == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idOpcaoTamanho é obrigatório");
+        }
+
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setAguardandoNovoNomeTamanhoProduto(true);
+        sessao.setIdProdutoNovoNomeTamanhoProduto(idProduto);
+        sessao.setIdCategoriaNovoNomeTamanhoProduto(idCategoria);
+        sessao.setIdOpcaoTamanhoNovoNomeProduto(idOpcaoTamanho);
+        sessao.setOffsetListaNovoNomeTamanhoProduto(normalizarOffset(offsetLista));
+
+        // Garante que a próxima digitação será tratada como nome, não como preço ou novo tamanho.
+        sessao.setAguardandoNovoPrecoProdutoTamanho(false);
+        sessao.setIdProdutoNovoPrecoTamanho(null);
+        sessao.setIdCategoriaNovoPrecoTamanho(null);
+        sessao.setIdOpcaoTamanhoProdutoNovoPreco(null);
+        sessao.setOffsetListaNovoPrecoTamanho(null);
+
+        sessao.setAguardandoNovoTamanhoProduto(false);
+        sessao.setIdProdutoNovoTamanhoProduto(null);
+        sessao.setIdCategoriaNovoTamanhoProduto(null);
+        sessao.setOffsetListaNovoTamanhoProduto(null);
+
+        sessao.setAguardando(null);
+
+        sessaoStore.salvar(sessao);
+    }
+
+    @Transactional
+    public void limparAguardandoNovoNomeTamanhoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setAguardandoNovoNomeTamanhoProduto(false);
+        sessao.setIdProdutoNovoNomeTamanhoProduto(null);
+        sessao.setIdCategoriaNovoNomeTamanhoProduto(null);
+        sessao.setIdOpcaoTamanhoNovoNomeProduto(null);
+        sessao.setOffsetListaNovoNomeTamanhoProduto(null);
+
+        sessaoStore.salvar(sessao);
+    }
 
     @Transactional(readOnly = true)
     public boolean isAguardandoDescricaoOpcaoTamanho(Long idSessao) {
@@ -200,7 +291,12 @@ public class SessaoWhatsappAdminTamanhoService {
         sessao.setIdOpcaoTamanhoProdutoNovoPreco(idOpcaoTamanho);
         sessao.setOffsetListaNovoPrecoTamanho(normalizarOffset(offsetLista));
 
-        // Evita conflito com estados de cliente baseados no campo genérico aguardando.
+        // Garante que a digitação será interpretada como preço, não como nome de tamanho.
+        sessao.setAguardandoNovoNomeTamanhoProduto(false);
+        sessao.setAguardandoNovoTamanhoProduto(false);
+        sessao.setIdProdutoNovoTamanhoProduto(null);
+        sessao.setIdCategoriaNovoTamanhoProduto(null);
+        sessao.setOffsetListaNovoTamanhoProduto(null);
         sessao.setAguardando(null);
 
         sessaoStore.salvar(sessao);
@@ -219,6 +315,83 @@ public class SessaoWhatsappAdminTamanhoService {
         sessaoStore.salvar(sessao);
     }
 
+    
+    @Transactional(readOnly = true)
+    public boolean isAguardandoNovoTamanhoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        return Boolean.TRUE.equals(sessao.getAguardandoNovoTamanhoProduto())
+            && sessao.getIdProdutoNovoTamanhoProduto() != null
+            && sessao.getIdCategoriaNovoTamanhoProduto() != null;
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdProdutoNovoTamanhoProduto(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdProdutoNovoTamanhoProduto();
+    }
+
+    @Transactional(readOnly = true)
+    public Long getIdCategoriaNovoTamanhoProduto(Long idSessao) {
+        return sessaoStore.buscarPorId(idSessao).getIdCategoriaNovoTamanhoProduto();
+    }
+
+    @Transactional(readOnly = true)
+    public Integer getOffsetListaNovoTamanhoProduto(Long idSessao) {
+        Integer offset = sessaoStore.buscarPorId(idSessao).getOffsetListaNovoTamanhoProduto();
+        return normalizarOffset(offset);
+    }
+
+    @Transactional
+    public void marcarAguardandoNovoTamanhoProduto(
+        Long idSessao,
+        Long idProduto,
+        Long idCategoria,
+        Integer offsetLista
+    ) {
+
+        if (idProduto == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idProduto é obrigatório");
+        }
+
+        if (idCategoria == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "idCategoria é obrigatório");
+        }
+
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setAguardandoNovoTamanhoProduto(true);
+        sessao.setIdProdutoNovoTamanhoProduto(idProduto);
+        sessao.setIdCategoriaNovoTamanhoProduto(idCategoria);
+        sessao.setOffsetListaNovoTamanhoProduto(normalizarOffset(offsetLista));
+
+        // Garante que a digitação será interpretada como nome do tamanho, não como preço.
+        sessao.setAguardandoNovoNomeTamanhoProduto(false);
+        sessao.setAguardandoNovoPrecoProdutoTamanho(false);
+        sessao.setIdProdutoNovoPrecoTamanho(null);
+        sessao.setIdCategoriaNovoPrecoTamanho(null);
+        sessao.setIdOpcaoTamanhoProdutoNovoPreco(null);
+        sessao.setOffsetListaNovoPrecoTamanho(null);
+
+        // Evita conflito com estados de cliente baseados no campo genérico aguardando.
+        sessao.setAguardando(null);
+
+        sessaoStore.salvar(sessao);
+    }
+    
+    
+
+    @Transactional
+    public void limparAguardandoNovoTamanhoProduto(Long idSessao) {
+        SessaoAtendimentoWhatsapp sessao = sessaoStore.buscarPorId(idSessao);
+
+        sessao.setAguardandoNovoTamanhoProduto(false);
+        sessao.setIdProdutoNovoTamanhoProduto(null);
+        sessao.setIdCategoriaNovoTamanhoProduto(null);
+        sessao.setOffsetListaNovoTamanhoProduto(null);
+
+        sessaoStore.salvar(sessao);
+    }
+    
     private Integer normalizarOffset(Integer offset) {
         return offset == null ? 0 : Math.max(0, offset);
     }

@@ -6,6 +6,7 @@ import br.com.oraped.domain.Estabelecimento;
 import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
+import br.com.oraped.service.whatsapp.administrador.AdminCategoriaService;
 import br.com.oraped.service.whatsapp.administrador.MenuAdminService;
 import br.com.oraped.service.whatsapp.administrador.ValidadorAdminService;
 import br.com.oraped.service.whatsapp.administrador.utils.AdministradorWhatsappResultados;
@@ -28,7 +29,8 @@ public class RoteamentoAdminService {
 
     private final ValidadorAdminService validadorAdminService;
     private final MenuAdminService menuAdminService;
-
+    private final AdminCategoriaService adminCategoriaService;
+    
     private final RoteamentoAdminLojaService roteamentoLojaAdminService;
     private final RoteamentoAdminPedidoService roteamentoPedidoAdminService;
     private final RoteamentoAdminCategoriaService roteamentoCategoriaAdminService;
@@ -85,11 +87,15 @@ public class RoteamentoAdminService {
         String acao
     ) {
 
-        if (isComandoMenuCardapio(acao)) {
-            AdministradorWhatsappResultados.ResultadoAdmin r =
-                menuAdminService.montarMenuCardapio(estabelecimento, whatsappAdmin);
+        if (isComandoMenuCardapio(acao)) {        
+        	AdministradorWhatsappResultados.ResultadoAdmin r =
+    	        adminCategoriaService.montarMenuCategorias(
+    	            estabelecimento,
+    	            whatsappAdmin,
+    	            0
+    	        );
 
-            return new RoteamentoResultado(r.chave, r.mensagem);
+    	    return new RoteamentoResultado(r.chave, r.mensagem);
         }
 
         if (isComandoLoja(acao)) {
@@ -113,7 +119,7 @@ public class RoteamentoAdminService {
         }
 
         if (isComandoComplementoCategoria(acao)) {
-            return roteamentoComplementoCategoriaAdminService.rotear(estabelecimento, whatsappAdmin, cmd);
+        	return roteamentoComplementoCategoriaAdminService.rotear(estabelecimento, whatsappAdmin, idSessao, cmd);
         }
 
         if (isComandoGrupoComplemento(acao)) {
@@ -121,7 +127,12 @@ public class RoteamentoAdminService {
         }
 
         if (isComandoComplementoProduto(acao)) {
-            return roteamentoComplementoProdutoAdminService.rotear(estabelecimento, whatsappAdmin, cmd);
+            return roteamentoComplementoProdutoAdminService.rotear(
+                estabelecimento,
+                whatsappAdmin,
+                idSessao,
+                cmd
+            );
         }
 
         if (isComandoMarca(acao)) {
@@ -150,7 +161,8 @@ public class RoteamentoAdminService {
     }
 
     private boolean isComandoPedido(String acao) {
-        return "ADMIN_VER_PEDIDOS".equals(acao)
+        return "ADMIN_PEDIDOS_MENU".equals(acao)
+            || "ADMIN_VER_PEDIDOS".equals(acao)
             || "ADMIN_PEDIDO_DETALHE".equals(acao)
             || "ADMIN_ACEITAR_PEDIDO".equals(acao)
             || "ADMIN_RECUSAR_PEDIDO".equals(acao)
@@ -182,10 +194,14 @@ public class RoteamentoAdminService {
     }
 
     private boolean isComandoTamanho(String acao) {
-        return acao != null && acao.startsWith("ADMIN_CAT_TAMANHOS")
-            || acao != null && acao.startsWith("ADMIN_TAM_OPCAO")
-            || "ADMIN_PROD_TAMANHOS_PRECOS".equals(acao)
-            || "ADMIN_PROD_TAM_PRECO_MENU".equals(acao);
+
+        return acao != null && (
+            acao.startsWith("ADMIN_CAT_TAMANHOS")
+                || acao.startsWith("ADMIN_TAM_OPCAO")
+                || acao.startsWith("ADMIN_PROD_TAMANHOS")
+                || acao.startsWith("ADMIN_PROD_TAMANHO")
+                || acao.startsWith("ADMIN_PROD_TAM")
+        );
     }
 
     private boolean isComandoComplementoCategoria(String acao) {

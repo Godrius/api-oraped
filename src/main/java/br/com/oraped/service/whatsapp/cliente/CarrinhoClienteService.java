@@ -69,7 +69,7 @@ public class CarrinhoClienteService {
 	        BigDecimal subtotalItem = calcularSubtotalItem(item);
 
 	        sb.append("*")
-	        .append(nome)
+	        .append(produto.getCategoria().getNome() + " - " + nome)
 	        .append("*\n");
 
 		    if (StringUtils.hasText(descricaoProduto)) {

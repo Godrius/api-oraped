@@ -8,6 +8,7 @@ import br.com.oraped.domain.whatsapp.ComandoWhatsapp;
 import br.com.oraped.domain.whatsapp.RoteamentoResultado;
 import br.com.oraped.dto.whatsapp.saida.MensagemWhatsappSaidaDTO;
 import br.com.oraped.service.whatsapp.WhatsappMensagemFactory;
+import br.com.oraped.service.whatsapp.cliente.EnderecoClienteService;
 import br.com.oraped.service.whatsapp.cliente.MenuClienteService;
 import br.com.oraped.service.whatsapp.cliente.PedidoClienteService;
 import br.com.oraped.service.whatsapp.orquestrador.OrquestradorParseService;
@@ -35,6 +36,7 @@ public class RoteamentoPedidoClienteService {
     private final OrquestradorParseService parse;
 
     private final MenuClienteService menus;
+    private final EnderecoClienteService enderecoClienteService;
     private final PedidoClienteService pedidoClienteService;
 
     private final WhatsappMensagemFactory msg;
@@ -166,7 +168,7 @@ public class RoteamentoPedidoClienteService {
 
         return new RoteamentoResultado(
             "solicitar_cep_entrega",
-            menus.montarSolicitacaoCepEntrega(whatsappCliente)
+            enderecoClienteService.montarSolicitacaoCepEntrega(whatsappCliente, true)
         );
     }
 

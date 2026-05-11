@@ -39,68 +39,56 @@ public class MenuAdminService {
 
         sup.validarBasico(estabelecimento, whatsappAdmin);
 
-        String cabecalho =
-            "🛠️ *Menu do Administrador*\n" +
-                "*" + sup.msg().safe(estabelecimento.getNome()) + "*\n\n" +
-                "Escolha o que deseja fazer:";
+        String statusLoja = estabelecimento.isAberto()
+    	    ? "🟢 Loja aberta para pedidos"
+    	    : "🔴 Loja fechada para pedidos";
 
-        List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
+    	String cabecalho =
+    	    "🛠️ *Painel Administrativo*\n\n" +
+    	    "*" + sup.msg().safe(estabelecimento.getNome()) + "*\n" +
+    	    statusLoja + "\n\n" +
+    	    "Digite *menu* a qualquer momento para voltar aqui.\n\n" +
+    	    "Escolha uma opção:";
 
-        if (estabelecimento.isAberto()) {
-            itens.add(sup.row(
-                "COMANDO|ADMIN_FECHAR_LOJA",
-                "🔒 Fechar loja",
-                "Parar de aceitar pedidos"
-            ));
-        } else {
-            itens.add(sup.row(
-                "COMANDO|ADMIN_ABRIR_LOJA",
-                "🔓 Abrir loja",
-                "Voltar a aceitar pedidos"
-            ));
-        }
+    	List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
 
-        itens.add(sup.row(
-            "COMANDO|ADMIN_CARDAPIO_MENU",
-            "🧾 Cardápio",
-            "Categorias, produtos, tamanhos e complementos"
-        ));
+    	if (estabelecimento.isAberto()) {
+    	    itens.add(sup.row(
+    	        "COMANDO|ADMIN_FECHAR_LOJA",
+    	        "🔴 Fechar loja",
+    	        "Parar de receber pedidos"
+    	    ));
+    	} else {
+    	    itens.add(sup.row(
+    	        "COMANDO|ADMIN_ABRIR_LOJA",
+    	        "🟢 Abrir loja",
+    	        "Voltar a receber pedidos"
+    	    ));
+    	}
 
-        itens.add(sup.row(
-            "COMANDO|ADMIN_VER_PEDIDOS|CRIADO|0",
-            "📥 Pedidos abertos",
-            "Aceitar ou recusar pedidos"
-        ));
+    	itens.add(sup.row(
+    	    "COMANDO|ADMIN_PEDIDOS_MENU",
+    	    "📦 Pedidos",
+    	    "Acompanhete todos os pedidos por status"
+    	));
 
-        itens.add(sup.row(
-            "COMANDO|ADMIN_VER_PEDIDOS|EM_PREPARO|0",
-            "👨‍🍳 Em preparo",
-            "Pedidos aceitos e em preparação"
-        ));
+    	itens.add(sup.row(
+    	    "COMANDO|ADMIN_CARDAPIO_MENU",
+    	    "🧾 Cardápio",
+    	    "Produtos, complementos, tamanhos e preços"
+    	));
 
-        itens.add(sup.row(
-            "COMANDO|ADMIN_VER_PEDIDOS|PRONTO|0",
-            "🛵 Em entrega",
-            "Pedidos em rota de entrega"
-        ));
+    	itens.add(sup.row(
+    	    "COMANDO|ADMIN_ENTREGAS_MENU",
+    	    "🚚 Logística",
+    	    "Áreas atendidas e taxas de entrega"
+    	));
 
-        itens.add(sup.row(
-            "COMANDO|ADMIN_VER_PEDIDOS|ENTREGUE|0",
-            "✅ Entregues",
-            "Pedidos já finalizados"
-        ));
-
-        itens.add(sup.row(
-            "COMANDO|ADMIN_ENTREGAS_MENU",
-            "🚚 Logística",
-            "Bairros atendidos e taxas de entrega"
-        ));
-
-        itens.add(sup.row(
-            "COMANDO|ADMIN_RELATORIOS_MENU",
-            "📊 Relatórios",
-            "Indicadores de vendas"
-        ));
+    	itens.add(sup.row(
+    	    "COMANDO|ADMIN_RELATORIOS_MENU",
+    	    "📊 Relatórios",
+    	    "Indicadores de desempenho"
+    	));
 
         return new AdministradorWhatsappResultados.ResultadoAdmin(
             "admin_menu",
@@ -114,55 +102,7 @@ public class MenuAdminService {
         );
     }
 
-    public AdministradorWhatsappResultados.ResultadoAdmin montarMenuCardapio(
-	    Estabelecimento estabelecimento,
-	    String whatsappAdmin
-	) {
-
-	    sup.validarBasico(estabelecimento, whatsappAdmin);
-
-	    String cabecalho =
-	        "🧾 *Cardápio*\n\n" +
-	            "Gerencie aqui tudo que o cliente vê ao fazer um pedido.\n\n" +
-	            "Escolha uma opção:";
-
-	    List<MensagemInterativaItemListaWhatsappDTO> itens = new ArrayList<>();
-
-	    itens.add(sup.row(
-	        "COMANDO|ADMIN_CARDAPIO_CATEGORIAS_MENU|0",
-	        "📂 Categorias",
-	        "Ver categorias e produtos"
-	    ));
-
-	    itens.add(sup.row(
-	        "COMANDO|ADMIN_PRODUTO_NOVO_CATEGORIA_MENU|0",
-	        "➕ Novo produto",
-	        "Cadastrar produto em uma categoria"
-	    ));
-
-	    itens.add(sup.row(
-	        "COMANDO|ADMIN_COMP_GRUPOS_MENU|0",
-	        "🧩 Complementos",
-	        "Criar grupos de complementos"
-	    ));
-
-	    itens.add(sup.row(
-	        "COMANDO|ADMIN_MENU",
-	        "⬅️ Voltar",
-	        "Menu do administrador"
-	    ));
-
-	    return new AdministradorWhatsappResultados.ResultadoAdmin(
-	        "admin_cardapio_menu",
-	        sup.msg().lista(
-	            whatsappAdmin,
-	            sup.msg().truncWord(cabecalho, 1024),
-	            "Ver opções",
-	            "Cardápio",
-	            itens
-	        )
-	    );
-	}
+    
 
     public AdministradorWhatsappResultados.ResultadoAdmin montarMenuEntregas(
         Estabelecimento estabelecimento,

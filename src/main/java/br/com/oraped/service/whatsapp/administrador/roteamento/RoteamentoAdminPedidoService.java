@@ -55,6 +55,16 @@ public class RoteamentoAdminPedidoService {
             // ADMIN: PEDIDOS
             // =========================================================
 
+	        case "ADMIN_PEDIDOS_MENU": {
+	            AdministradorWhatsappResultados.ResultadoAdmin r =
+	                adminPedidoService.montarMenuPedidos(
+	                    estabelecimento,
+	                    whatsappAdmin
+	                );
+	
+	            return new RoteamentoResultado(r.chave, r.mensagem);
+	        }
+	        
             case "ADMIN_VER_PEDIDOS": {
                 StatusPedido status = parse.parseStatusPedidoObrigatorio(cmd.getParte(2));
                 Integer offset = parse.parseIntDefaultZero(cmd.getParte(3));
